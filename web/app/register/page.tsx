@@ -2,21 +2,64 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (password !== confirmPassword) {
-      // TODO: show error message
+    setError(null);
+    setLoading(true);
+
+    if (password != confirmPassword) {
+      setError("Passwords do not match");
+      setLoading(false);
       return;
     }
-    // TODO: connect to your auth API
-    console.log({ name, email, password });
+
+    try {
+      const supabase = createClient();
+      
+      // Sign up the user
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name: name, // Store name in user metadata
+          },
+        },
+      });
+
+      if (signUpError) {
+        console.error("Supabase sign up error:", signUpError);
+        setError(signUpError.message || "Failed to create account. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      if (data.user) {
+        router.push("/");
+        router.refresh();
+      } else {
+        console.error("No user returned from signup");
+        setError("Registration failed. No user was created.");
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error("Registration error:", error);
+      const errorMessage = error instanceof Error ? error.message : "An error occurred. Please try again.";
+      setError(errorMessage);
+      setLoading(false);
+    }
   }
 
   return (
@@ -28,6 +71,12 @@ export default function RegisterPage() {
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           Join Neighborly and connect with your community
         </p>
+
+        {error && (
+          <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
@@ -108,9 +157,10 @@ export default function RegisterPage() {
           </div>
           <button
             type="submit"
+            disabled={loading}
             className="w-full rounded-lg bg-zinc-900 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
-            Sign up
+            {loading ? "Signing up..." : "Sign up"}
           </button>
         </form>
 
