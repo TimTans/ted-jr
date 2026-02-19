@@ -1,0 +1,25 @@
+xcuserdata/
+*.xcuserstate
+
+# Build output
+build/
+DerivedData/
+
+# macOS
+.DS_Store
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Compiled binaries
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# Carthage
+Carthage/Build/

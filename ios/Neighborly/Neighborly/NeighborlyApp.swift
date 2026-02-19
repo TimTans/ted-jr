@@ -9,9 +9,15 @@ import SwiftUI
 
 @main
 struct NeighborlyApp: App {
+    @State private var isLoggedIn = false
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if isLoggedIn {
+                HomeView(isLoggedIn: $isLoggedIn)
+            } else {
+                LoginView(isLoggedIn: $isLoggedIn)
+            }
         }
     }
 }
