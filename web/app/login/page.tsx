@@ -2,15 +2,51 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // TODO: connect to your auth API
-    console.log({ email, password });
+    setError(null);
+    setLoading(true);
+
+
+    try {
+      const supabase = createClient();
+
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError) {
+        console.error("Supabase login error:", signInError);
+        setError(signInError.message || "Failed to sign in. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      if (data.user) {
+        router.push("/");
+        router.refresh();
+      } else {
+        setError("Login failed. No user was found.");
+        setLoading(false);
+      }
+
+    } catch (error) {
+      console.error("Login error:", error);
+      const errorMessage = error instanceof Error ? error.message: "An error occurred. Please try again.";
+      setError(errorMessage);
+      setLoading(false);
+    }
   }
 
   return (
@@ -22,6 +58,12 @@ export default function LoginPage() {
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           Sign in to your Neighborly account
         </p>
+
+        {error && (
+          <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
@@ -62,9 +104,10 @@ export default function LoginPage() {
           </div>
           <button
             type="submit"
-            className="w-full rounded-lg bg-zinc-900 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            disabled={loading}
+            className="w-full rounded-lg bg-zinc-900 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
-            Sign in
+            {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
 
