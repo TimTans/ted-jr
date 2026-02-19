@@ -16,6 +16,13 @@ struct PreferencesView: View {
 }
 
 
+enum Priority: String, CaseIterable, Identifiable {
+    case lowestCost = "Lowest Cost"
+    case shortestRoute = "Shortest Route"
+    case fastestTrip = "Fastest Trip"
+    var id: String { rawValue }
+}
+
 enum TransportMode: String, CaseIterable, Identifiable {
     case walking = "Walking"
     case publicTransport = "Public Transport"
@@ -49,9 +56,7 @@ enum TransportMode: String, CaseIterable, Identifiable {
 }
 
 struct Preferences: Equatable {
-    var prioritizeLowestCost: Bool = true
-    var prioritizeShortestRoute: Bool = false
-    var prioritizeFastestTrip: Bool = false
+    var priority: Priority = .lowestCost
 
     var enabledModes: Set<TransportMode> = [.walking, .publicTransport, .car]
 
@@ -60,9 +65,9 @@ struct Preferences: Equatable {
 
     var wellnessEnabled: Bool = true
 
-    var cholesterolLimit: String = "100 mg"
-    var sodiumLimit: String = "1000 mg/Day"
-    var sugarLimit: String = "20 g/Day"
+    var cholesterolLimit: String = ""
+    var sodiumLimit: String = ""
+    var sugarLimit: String = ""
 
     var dietVegan: Bool = false
     var dietGlutenFree: Bool = true
@@ -194,11 +199,16 @@ struct PreferencesOneScrollView: View {
 
                     VStack(spacing: 16) {
 
-                        // Priorities
-                        VStack(spacing: 14) {
-                            ToggleRow(title: "Prioritize Lowest Cost", isOn: $prefs.prioritizeLowestCost)
-                            ToggleRow(title: "Prioritize Shortest Route", isOn: $prefs.prioritizeShortestRoute)
-                            ToggleRow(title: "Prioritize Fastest Trip", isOn: $prefs.prioritizeFastestTrip)
+                        // Priority
+                        HStack {
+                            Text("Prioritize").foregroundStyle(.secondary)
+                            Spacer()
+                            Picker("Prioritize", selection: $prefs.priority) {
+                                ForEach(Priority.allCases) { p in
+                                    Text(p.rawValue).tag(p)
+                                }
+                            }
+                            .pickerStyle(.menu)
                         }
                         .padding(14)
                         .background(cardBackground)
@@ -321,40 +331,36 @@ struct WellnessSection: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            // Header row (tap to expand/collapse)
-            Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
-                    expanded.toggle()
+            // Header row — toggle controls enabled, chevron controls expand
+            HStack {
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                        expanded.toggle()
+                    }
+                } label: {
+                    HStack {
+                        Text("Wellness/Dietary Preferences")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            .foregroundStyle(.secondary)
+                    }
+                    .contentShape(Rectangle())
                 }
-            } label: {
-                HStack {
-                    Text("Wellness/Dietary Preferences")
-                        .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
 
-                    Spacer()
-
-                    Toggle("", isOn: $prefs.wellnessEnabled)
-                        .labelsHidden()
-                        .allowsHitTesting(false) // keep tap on header consistent
-
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 6)
-                }
-                .contentShape(Rectangle())
+                Toggle("", isOn: $prefs.wellnessEnabled)
+                    .labelsHidden()
+                    .padding(.leading, 6)
             }
-            .buttonStyle(.plain)
 
-            // Always show cholesterol field (matches your first screen)
-            LabeledTextField(
-                title: "Cholesterol Limit",
-                placeholder: "100 mg",
-                text: $prefs.cholesterolLimit
-            )
-
-            // Expanded portion = your second screen content
-            if expanded {
-                Divider().opacity(0.15)
+            // All wellness fields hidden when toggle is off
+            if prefs.wellnessEnabled {
+                LabeledTextField(
+                    title: "Cholesterol Limit",
+                    placeholder: "100 mg",
+                    text: $prefs.cholesterolLimit
+                )
 
                 LabeledTextField(
                     title: "Sodium Limit",
@@ -368,34 +374,38 @@ struct WellnessSection: View {
                     text: $prefs.sugarLimit
                 )
 
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Diet Type").foregroundStyle(.secondary)
+                if expanded {
+                    Divider().opacity(0.15)
 
-                    HStack(alignment: .top, spacing: 24) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            CheckRow(title: "Vegan", checked: $prefs.dietVegan)
-                            CheckRow(title: "Gluten-Free", checked: $prefs.dietGlutenFree)
-                            CheckRow(title: "Low Carb", checked: $prefs.dietLowCarb)
-                        }
-                        VStack(alignment: .leading, spacing: 12) {
-                            CheckRow(title: "Kosher", checked: $prefs.dietKosher)
-                            CheckRow(title: "Halal", checked: $prefs.dietHalal)
-                            CheckRow(title: "Keto", checked: $prefs.dietKeto)
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Diet Type").foregroundStyle(.secondary)
+
+                        HStack(alignment: .top, spacing: 24) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                CheckRow(title: "Vegan", checked: $prefs.dietVegan)
+                                CheckRow(title: "Gluten-Free", checked: $prefs.dietGlutenFree)
+                                CheckRow(title: "Low Carb", checked: $prefs.dietLowCarb)
+                            }
+                            VStack(alignment: .leading, spacing: 12) {
+                                CheckRow(title: "Kosher", checked: $prefs.dietKosher)
+                                CheckRow(title: "Halal", checked: $prefs.dietHalal)
+                                CheckRow(title: "Keto", checked: $prefs.dietKeto)
+                            }
                         }
                     }
-                }
-                .padding(.top, 6)
+                    .padding(.top, 6)
 
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("Allergens to Avoid").foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 12) {
-                        CheckRow(title: "Dairy", checked: $prefs.avoidDairy)
-                        CheckRow(title: "Peanuts", checked: $prefs.avoidPeanuts)
-                        CheckRow(title: "Shellfish", checked: $prefs.avoidShellfish)
-                        CheckRow(title: "Wheat", checked: $prefs.avoidWheat)
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("Allergens to Avoid").foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 12) {
+                            CheckRow(title: "Dairy", checked: $prefs.avoidDairy)
+                            CheckRow(title: "Peanuts", checked: $prefs.avoidPeanuts)
+                            CheckRow(title: "Shellfish", checked: $prefs.avoidShellfish)
+                            CheckRow(title: "Wheat", checked: $prefs.avoidWheat)
+                        }
                     }
+                    .padding(.top, 6)
                 }
-                .padding(.top, 6)
             }
         }
         .padding(14)
