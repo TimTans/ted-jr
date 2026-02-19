@@ -252,9 +252,6 @@ struct PreferencesOneScrollView: View {
             .navigationTitle("Your Preferences")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Image(systemName: "chevron.left").foregroundStyle(.secondary)
-                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Circle()
                         .fill(Color.gray.opacity(0.2))
