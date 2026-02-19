@@ -30,6 +30,22 @@ enum TransportMode: String, CaseIterable, Identifiable {
         case .car: return "car.fill"
         }
     }
+
+    var emoji: String {
+        switch self {
+        case .walking: return "🚶"
+        case .publicTransport: return "🚌"
+        case .car: return "🚗"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .walking: return "Walking"
+        case .publicTransport: return "Public Transport"
+        case .car: return "Driving"
+        }
+    }
 }
 
 struct Preferences: Equatable {
@@ -187,15 +203,10 @@ struct PreferencesOneScrollView: View {
                         .padding(14)
                         .background(cardBackground)
 
-                        // Modes (simple version, you can plug your card UI back in)
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Modes of Transport").foregroundStyle(.secondary)
-                            Text("⚙️ (Drop your transport cards here)")
-                                .foregroundStyle(.secondary)
-                                .font(.footnote)
-                        }
-                        .padding(14)
-                        .background(cardBackground)
+                        // Modes of Transport
+                        TransportModeSelector(enabledModes: $prefs.enabledModes)
+                            .padding(14)
+                            .background(cardBackground)
 
                         // Sliders (simple placeholder; plug your slider UI back in)
                         VStack(alignment: .leading, spacing: 10) {
@@ -257,6 +268,51 @@ struct PreferencesOneScrollView: View {
         RoundedRectangle(cornerRadius: 22, style: .continuous)
             .fill(Color.white)
             .shadow(color: .black.opacity(0.03), radius: 10, x: 0, y: 5)
+    }
+}
+
+// MARK: - Transport Mode Selector
+
+struct TransportModeSelector: View {
+    @Binding var enabledModes: Set<TransportMode>
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Modes of Transport").foregroundStyle(.secondary)
+
+            HStack(spacing: 10) {
+                ForEach(TransportMode.allCases) { mode in
+                    let isSelected = enabledModes.contains(mode)
+                    Button {
+                        if isSelected {
+                            enabledModes.remove(mode)
+                        } else {
+                            enabledModes.insert(mode)
+                        }
+                    } label: {
+                        VStack(spacing: 6) {
+                            Text(mode.emoji)
+                                .font(.system(size: 28))
+                            Text(mode.label)
+                                .font(.caption)
+                                .fontWeight(.medium)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(isSelected ? Color.cyan.opacity(0.15) : Color.gray.opacity(0.08))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(isSelected ? Color.cyan : Color.clear, lineWidth: 1.5)
+                        )
+                        .foregroundStyle(isSelected ? Color.cyan : Color.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
     }
 }
 
