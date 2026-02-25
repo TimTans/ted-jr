@@ -1,66 +1,13 @@
-"use client";
-
+'use server'
 import Link from "next/link";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { signup } from "./action";
 
-export default function RegisterPage() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-
-    if (password != confirmPassword) {
-      setError("Passwords do not match");
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const supabase = createClient();
-      
-      // Sign up the user
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            name: name, // Store name in user metadata
-          },
-        },
-      });
-
-      if (signUpError) {
-        console.error("Supabase sign up error:", signUpError);
-        setError(signUpError.message || "Failed to create account. Please try again.");
-        setLoading(false);
-        return;
-      }
-
-      if (data.user) {
-        router.push("/");
-        router.refresh();
-      } else {
-        console.error("No user returned from signup");
-        setError("Registration failed. No user was created.");
-        setLoading(false);
-      }
-    } catch (error) {
-      console.error("Registration error:", error);
-      const errorMessage = error instanceof Error ? error.message : "An error occurred. Please try again.";
-      setError(errorMessage);
-      setLoading(false);
-    }
-  }
+export default async function RegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-12 dark:bg-zinc-950">
@@ -74,28 +21,46 @@ export default function RegisterPage() {
 
         {error && (
           <div className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
-            {error}
+            {decodeURIComponent(error)}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div>
-            <label
-              htmlFor="name"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Name
-            </label>
-            <input
-              id="name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              autoComplete="name"
-              className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500"
-              placeholder="Your name"
-            />
+        <form className="mt-6 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label
+                htmlFor="first_name"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
+                First name
+              </label>
+              <input
+                id="first_name"
+                name="first_name"
+                type="text"
+                required
+                autoComplete="given-name"
+                className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500"
+                placeholder="John"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="last_name"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
+                Last name
+              </label>
+              <input
+                id="last_name"
+                name="last_name"
+                type="text"
+                required
+                autoComplete="family-name"
+                className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500"
+                placeholder="Doe"
+              />
+            </div>
           </div>
           <div>
             <label
@@ -106,9 +71,8 @@ export default function RegisterPage() {
             </label>
             <input
               id="email"
+              name="email"
               type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="email"
               className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500"
@@ -124,9 +88,8 @@ export default function RegisterPage() {
             </label>
             <input
               id="password"
+              name="password"
               type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
               required
               autoComplete="new-password"
               minLength={8}
@@ -139,16 +102,15 @@ export default function RegisterPage() {
           </div>
           <div>
             <label
-              htmlFor="confirmPassword"
+              htmlFor="confirm_password"
               className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
             >
               Confirm password
             </label>
             <input
-              id="confirmPassword"
+              id="confirm_password"
+              name="confirm_password"
               type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
               required
               autoComplete="new-password"
               className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500"
@@ -156,11 +118,10 @@ export default function RegisterPage() {
             />
           </div>
           <button
-            type="submit"
-            disabled={loading}
+            formAction={signup}
             className="w-full rounded-lg bg-zinc-900 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
-            {loading ? "Signing up..." : "Sign up"}
+            Sign up
           </button>
         </form>
 
