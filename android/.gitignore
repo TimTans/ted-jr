@@ -8,7 +8,7 @@ app/build/
 captures/
 
 # Android Studio / IntelliJ
-.idea/
+.idea/*
 *.iml
 # Keep shared project config; ignore local/cache
 .idea/caches/
