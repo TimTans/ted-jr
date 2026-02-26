@@ -1,89 +1,187 @@
-"use client";
+import Link from 'next/link'
+import { login } from './action'
 
-import Link from "next/link";
-import { useState } from "react";
-
-export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    // TODO: connect to your auth API
-    console.log({ email, password });
-  }
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>
+}) {
+  const { error } = await searchParams
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 dark:bg-zinc-950">
-      <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Welcome back
-        </h1>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Sign in to your Neighborly account
-        </p>
+    <div
+      className="flex min-h-screen flex-col items-center justify-center px-4 py-12"
+      style={{ backgroundColor: "#f8f5ef" }}
+    >
+      <style>{`
+        .nb-input {
+          border: 1px solid #ddd6c9;
+          background-color: #ffffff;
+          color: #2c2c2c;
+          transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .nb-input::placeholder {
+          color: #bfb8ab;
+        }
+        .nb-input:focus {
+          border-color: #4a8c2a;
+          box-shadow: 0 0 0 3px rgba(74,140,42,0.1);
+          outline: none;
+        }
+        .nb-btn {
+          background-color: #3d7a1c;
+          transition: background-color 0.2s, transform 0.1s;
+        }
+        .nb-btn:hover {
+          background-color: #316315;
+        }
+        .nb-btn:active {
+          transform: scale(0.98);
+        }
+        .nb-link {
+          color: #3d7a1c;
+          transition: color 0.15s;
+        }
+        .nb-link:hover {
+          color: #316315;
+        }
+        .nb-back {
+          color: #9b9283;
+          transition: color 0.15s;
+        }
+        .nb-back:hover {
+          color: #5a5347;
+        }
+        .nb-card {
+          border: 1px solid #e4ded3;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.02);
+        }
+      `}</style>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-              className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500"
-              placeholder="you@example.com"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
-            >
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-              className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500"
-              placeholder="••••••••"
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full rounded-lg bg-zinc-900 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+      {/* Logo */}
+      <Link href="/" className="mb-10 flex items-center gap-3">
+        <div
+          className="flex h-11 w-11 items-center justify-center rounded-full text-lg font-bold text-white"
+          style={{ backgroundColor: "#3d7a1c" }}
+        >
+          N
+        </div>
+        <div className="flex flex-col">
+          <span
+            className="text-[1.3rem] font-semibold leading-tight"
+            style={{ color: "#2c2c2c" }}
           >
-            Sign in
-          </button>
-        </form>
+            Neighborly
+          </span>
+          <span
+            className="text-[0.7rem] tracking-wide"
+            style={{ color: "#9b9283" }}
+          >
+            Smart grocery planning
+          </span>
+        </div>
+      </Link>
 
-        <p className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-          Don&apos;t have an account?{" "}
-          <Link
-            href="/register"
-            className="font-medium text-zinc-900 underline underline-offset-2 hover:no-underline dark:text-zinc-100"
+      {/* Card */}
+      <div className="nb-card w-full max-w-[400px] rounded-2xl bg-white">
+        {/* Header */}
+        <div
+          className="border-b px-8 pb-5 pt-7"
+          style={{ borderColor: "#e4ded3" }}
+        >
+          <h1
+            className="text-[1.55rem] font-semibold tracking-tight"
+            style={{ color: "#2c2c2c", fontFamily: "Georgia, 'Times New Roman', serif" }}
           >
-            Sign up
-          </Link>
-        </p>
+            Welcome back
+          </h1>
+          <p className="mt-1.5 text-[0.84rem]" style={{ color: "#9b9283" }}>
+            Sign in to your Neighborly account
+          </p>
+        </div>
+
+        {/* Form body */}
+        <div className="px-8 pb-7 pt-6">
+          {error && (
+            <div
+              className="mb-5 rounded-xl px-4 py-3 text-[0.84rem]"
+              style={{
+                backgroundColor: "#fdf3ec",
+                color: "#bf4a0a",
+                border: "1px solid #f0d4bb",
+              }}
+            >
+              {decodeURIComponent(error)}
+            </div>
+          )}
+
+          <form className="space-y-5">
+            <div>
+              <label
+                htmlFor="email"
+                className="mb-1.5 block text-[0.82rem] font-medium"
+                style={{ color: "#5a5347" }}
+              >
+                Email
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                required
+                autoComplete="email"
+                className="nb-input w-full rounded-xl px-3.5 py-2.5 text-[0.88rem]"
+                placeholder="you@example.com"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="password"
+                className="mb-1.5 block text-[0.82rem] font-medium"
+                style={{ color: "#5a5347" }}
+              >
+                Password
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                required
+                autoComplete="current-password"
+                className="nb-input w-full rounded-xl px-3.5 py-2.5 text-[0.88rem]"
+                placeholder="••••••••"
+              />
+            </div>
+
+            <button
+              formAction={login}
+              className="nb-btn w-full rounded-xl py-3 text-[0.88rem] font-semibold text-white"
+            >
+              Sign in →
+            </button>
+          </form>
+
+          <div
+            className="mt-6 border-t pt-5 text-center"
+            style={{ borderColor: "#e4ded3" }}
+          >
+            <p className="text-[0.84rem]" style={{ color: "#9b9283" }}>
+              Don&apos;t have an account?{" "}
+              <Link
+                href="/register"
+                className="nb-link font-medium underline underline-offset-2"
+              >
+                Sign up
+              </Link>
+            </p>
+          </div>
+        </div>
       </div>
-      <Link
-        href="/"
-        className="mt-6 text-sm text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-300"
-      >
+
+      <Link href="/" className="nb-back mt-8 text-[0.84rem]">
         ← Back to home
       </Link>
     </div>
-  );
+  )
 }
