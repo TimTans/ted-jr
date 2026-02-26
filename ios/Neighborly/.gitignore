@@ -17,9 +17,9 @@ DerivedData/
 *.dSYM
 *.dSYM.zip
 
-# CocoaPods
+# CocoaPods (Pods/ is generated; commit Podfile.lock for reproducible builds)
 Pods/
-Podfile.lock
+# Podfile.lock — uncomment to ignore (not recommended for teams)
 
 # Carthage
 Carthage/Build/
