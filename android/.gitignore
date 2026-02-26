@@ -1,4 +1,16 @@
+# Gradle
+.gradle/
+local.properties
+
+# Build outputs
+build/
+app/build/
+captures/
+
+# Android Studio / IntelliJ
+.idea/*
 *.iml
+# Keep shared project config; ignore local/cache
 .gradle
 /local.properties
 /.idea/caches
@@ -7,6 +19,12 @@
 /.idea/workspace.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
+
+# Native build
+.externalNativeBuild/
+.cxx/
+
+# OS
 .DS_Store
 /build
 /captures
