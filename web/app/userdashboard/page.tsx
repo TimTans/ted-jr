@@ -409,7 +409,7 @@ const UserDashboard = () => {
               fontSize: 30, fontWeight: 600, color: "white",
               letterSpacing: "-0.02em", marginBottom: 6,
             }}>
-              Good morning, Evan
+              Good morning, User
             </div>
             <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 15, maxWidth: 460 }}>
               Your optimized route is ready. 3 stores, 12 items — estimated savings of <span style={{ color: "#A5D6A7", fontWeight: 600 }}>$6.70</span> vs. single-store shopping.
