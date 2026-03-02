@@ -369,7 +369,7 @@ export default function NeighborlyHomepage() {
           Prices aggregated from stores you love
         </p>
         <div style={{ display: "flex", animation: "marquee 20s linear infinite", width: "fit-content" }}>
-          {[...Array(2)].flatMap(() => [ "Kroger", "MORE COMING SOON", "Kroger", "MORE COMING SOON", "Kroger", "MORE COMING SOON"]).map((name, i) => (
+          {[...Array(2)].flatMap(() => [ "ShopRite", "MORE COMING SOON", "ShopRite", "MORE COMING SOON", "ShopRite", "MORE COMING SOON"]).map((name, i) => (
             <div key={i} style={{
               padding: "12px 36px", marginRight: 24,
               background: COLORS.card, borderRadius: 12, border: `1px solid ${COLORS.divider}`,
