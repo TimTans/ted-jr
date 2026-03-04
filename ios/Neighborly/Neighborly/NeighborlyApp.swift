@@ -1,22 +1,23 @@
-//
-//  NeighborlyApp.swift
-//  Neighborly
-//
-//  Created by Jawad Chowdhury on 2/10/26.
-//
-
 import SwiftUI
 
 @main
 struct NeighborlyApp: App {
-    @State private var isLoggedIn = false
+    @State private var authController = AuthController()
 
     var body: some Scene {
         WindowGroup {
-            if isLoggedIn {
-                HomeView(isLoggedIn: $isLoggedIn)
-            } else {
-                LoginView(isLoggedIn: $isLoggedIn)
+            Group {
+                if authController.isLoading {
+                    ProgressView("Loading...")
+                } else if authController.isAuthenticated {
+                    HomeView()
+                } else {
+                    LoginView()
+                }
+            }
+            .environment(authController)
+            .task {
+                await authController.listenForAuthChanges()
             }
         }
     }
