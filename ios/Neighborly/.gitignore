@@ -23,3 +23,6 @@ Podfile.lock
 
 # Carthage
 Carthage/Build/
+
+# Config Secrets
+Config/Secrets.xcconfig
