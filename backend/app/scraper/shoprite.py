@@ -51,9 +51,18 @@ class StoreConfig:
                 opening shoprite.com, selecting your store, browsing to the
                 category, and copying the URL from the address bar.
 
-    # Future (multi-store): pass list[StoreConfig] to the runner
-    # and call scrape_store() for each, either sequentially or with
-    # asyncio.gather() for concurrent scraping.
+    # Future (multi-store / multi-category):
+    #   add Store(store_id, zip_code) and Category(category_id, breadcrumb)
+    #   dataclasses. add a build(store, category) classmethod here that
+    #   derives browse_url from the components:
+    #     slug = "/".join(breadcrumb.split("/")[1:])  # drop "grocery" prefix
+    #     parts = slug.rsplit("/", 1)  # ["dairy", "milk"]
+    #     path = f"{parts[0]}/{parts[1]}-id-{category_id}"
+    #     url = f"https://www.shoprite.com/sm/pickup/rsid/{store_id}"
+    #           f"/categories/{path}?f=Breadcrumb%3A{encoded_breadcrumb}"
+    #
+    #   then the runner loops Store x Category and calls scrape_store()
+    #   for each generated StoreConfig.
     """
     store_id: str
     zip_code: str

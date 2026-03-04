@@ -1,5 +1,5 @@
-from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from fastapi import APIRouter, Body, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from app.services import fdc as fdc_service
 
@@ -33,16 +33,22 @@ async def get_food(fdc_id: int):
 
 
 class BulkFoodRequest(BaseModel):
-    fdc_ids: list[int]
-
-    model_config = {
-        "json_schema_extra": {
-            "example": {"fdc_ids": [167512, 167513, 167514]}
-        }
-    }
+    fdc_ids: list[int] = Field(
+        description="list of FDC food IDs to fetch",
+        examples=[[167512, 167513, 167514]],
+    )
 
 
 @router.post("/foods/bulk")
-async def get_foods_bulk(body: BulkFoodRequest):
+async def get_foods_bulk(
+    body: BulkFoodRequest = Body(
+        openapi_examples={
+            "three foods": {
+                "summary": "batch lookup of three foods",
+                "value": {"fdc_ids": [167512, 167513, 167514]},
+            },
+        },
+    ),
+):
     """fetch nutrition details for multiple foods in one request."""
     return await fdc_service.get_foods_bulk(body.fdc_ids)

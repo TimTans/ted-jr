@@ -41,30 +41,59 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# store configuration — single store + category hardcoded for now.
+# store + category configurations.
 #
 # to find store_id and category_id: open shoprite.com in chrome, set your
-# store, browse a product category, and inspect the network tab for requests
-# to storefrontgateway.shoprite.com/api/stores/{store_id}/categories/{category_id}/search
+# store, browse a product category, and copy the URL from the address bar.
 #
-# Future (multi-store): define a list[StoreConfig] and run concurrently:
-#   STORES = [
-#       StoreConfig(store_id="139", zip_code="07030", category_id="520592", breadcrumb="grocery/dairy/milk"),
-#       StoreConfig(store_id="200", zip_code="07302", category_id="520592", breadcrumb="grocery/dairy/milk"),
-#   ]
-#   results = await asyncio.gather(*[scrape_store(s) for s in STORES])
+# note: the url slug doesn't always match the breadcrumb (e.g. "bread & bakery"
+# becomes "bread-bakery" in the path), so we store the full browse_url.
+#
+# Future (multi-store):
+#   separate stores and categories into independent lists, then loop over
+#   the cartesian product. add Store / Category dataclasses and a
+#   StoreConfig.build() classmethod to shoprite.py. the slug mapping will
+#   need a lookup or a scrape of the category nav tree.
+#   use asyncio.Semaphore to limit concurrency (3-4 browsers max).
 # ---------------------------------------------------------------------------
-STORE = StoreConfig(
-    store_id="139",
-    zip_code="07030",
-    category_id="520592",
-    breadcrumb="grocery/dairy/milk",
-    browse_url=(
-        "https://www.shoprite.com/sm/pickup/rsid/139"
-        "/categories/dairy/milk-id-520592"
-        "?f=Breadcrumb%3Agrocery%2Fdairy%2Fmilk"
+STORE_ID = "139"
+ZIP_CODE = "07030"
+
+CONFIGS = [
+    StoreConfig(
+        store_id=STORE_ID,
+        zip_code=ZIP_CODE,
+        category_id="520592",
+        breadcrumb="grocery/dairy/milk",
+        browse_url=(
+            f"https://www.shoprite.com/sm/pickup/rsid/{STORE_ID}"
+            "/categories/dairy/milk-id-520592"
+            "?f=Breadcrumb%3Agrocery%2Fdairy%2Fmilk"
+        ),
     ),
-)
+    StoreConfig(
+        store_id=STORE_ID,
+        zip_code=ZIP_CODE,
+        category_id="520591",
+        breadcrumb="grocery/dairy/eggs",
+        browse_url=(
+            f"https://www.shoprite.com/sm/pickup/rsid/{STORE_ID}"
+            "/categories/dairy/eggs-id-520591"
+            "?f=Breadcrumb%3Agrocery%2Fdairy%2Feggs"
+        ),
+    ),
+    StoreConfig(
+        store_id=STORE_ID,
+        zip_code=ZIP_CODE,
+        category_id="520567",
+        breadcrumb="grocery/bread & bakery/bread",
+        browse_url=(
+            f"https://www.shoprite.com/sm/pickup/rsid/{STORE_ID}"
+            "/categories/bread-bakery/bread-id-520567"
+            "?f=Breadcrumb%3Agrocery%2Fbread+%26+bakery%2Fbread"
+        ),
+    ),
+]
 
 OUTPUT_DIR = Path(__file__).parent.parent / "data"
 SESSION_PATH = OUTPUT_DIR / "shoprite_session.json"
@@ -74,14 +103,8 @@ async def main() -> int:
     """returns exit code: 0 on success, 1 on failure."""
     OUTPUT_DIR.mkdir(exist_ok=True)
 
-    logger.info(
-        "starting shoprite scrape | store: %s | category: %s | zip: %s",
-        STORE.store_id,
-        STORE.category_id,
-        STORE.zip_code,
-    )
-
-    if SESSION_PATH.exists():
+    session = SESSION_PATH if SESSION_PATH.exists() else None
+    if session:
         logger.info("using saved session: %s", SESSION_PATH)
     else:
         logger.warning(
@@ -91,39 +114,51 @@ async def main() -> int:
         )
 
     start = time.monotonic()
+    all_products = []
+    failed = []
 
-    try:
-        products = await scrape_store(
-            STORE,
-            session_state=SESSION_PATH if SESSION_PATH.exists() else None,
+    for config in CONFIGS:
+        logger.info(
+            "scraping store %s | category: %s (%s)",
+            config.store_id, config.breadcrumb, config.category_id,
         )
-    except RuntimeError as e:
-        # zero product guard —> scrape loop completed but collected nothing.
-        # check store_id, category_id, and breadcrumb in STORE config.
-        logger.error("%s", e)
-        return 1
-    except Exception as e:
-        logger.error("scrape failed for store %s: %s", STORE.store_id, e)
-        return 1
+        try:
+            products = await scrape_store(config, session_state=session)
+            all_products.extend(products)
+            logger.info(
+                "category %s: %d products", config.breadcrumb, len(products),
+            )
+        except Exception as e:
+            logger.error("category %s failed: %s", config.breadcrumb, e)
+            failed.append(config.breadcrumb)
+            continue
 
     elapsed = time.monotonic() - start
+
+    if not all_products:
+        logger.error("no products collected from any category")
+        return 1
+
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    output_path = OUTPUT_DIR / f"shoprite_{STORE.store_id}_{timestamp}.json"
+    output_path = OUTPUT_DIR / f"shoprite_{STORE_ID}_{timestamp}.json"
 
     output_path.write_text(
-        json.dumps([p.to_dict() for p in products], indent=2),
+        json.dumps([p.to_dict() for p in all_products], indent=2),
         encoding="utf-8",
     )
 
     print(f"\n{'=' * 50}")
     print("ShopRite Scrape Complete")
-    print(f"  Store:    {STORE.store_id} (zip {STORE.zip_code})")
-    print(f"  Products: {len(products)}")
-    print(f"  Duration: {elapsed:.1f}s")
-    print(f"  Output:   {output_path}")
+    print(f"  Store:      {STORE_ID} (zip {ZIP_CODE})")
+    print(f"  Categories: {len(CONFIGS) - len(failed)}/{len(CONFIGS)} succeeded")
+    print(f"  Products:   {len(all_products)}")
+    print(f"  Duration:   {elapsed:.1f}s")
+    print(f"  Output:     {output_path}")
+    if failed:
+        print(f"  Failed:     {', '.join(failed)}")
     print(f"{'=' * 50}\n")
 
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
