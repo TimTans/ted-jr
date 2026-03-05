@@ -1,5 +1,6 @@
 'use client'
 import { useState } from "react";
+import Link from "next/link";
 import ProfileDropdown from "@/components/ProfileDropdown";
 
 interface DietaryOption {
@@ -515,6 +516,15 @@ export default function NeighborlySettings() {
 
           {/* Main content */}
           <main className="flex-1 min-w-0">
+
+            {/* Back to dashboard — visible and scannable at top of content */}
+            <Link
+              href="/userdashboard"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-stone-500 hover:text-green-700 transition-colors mb-4 sm:mb-6"
+            >
+              <span aria-hidden>←</span>
+              <span>Back to dashboard</span>
+            </Link>
 
             {/* Mobile section picker */}
             <div className="md:hidden mb-4">
