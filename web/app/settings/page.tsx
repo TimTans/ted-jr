@@ -377,7 +377,6 @@ function AccountSection() {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function NeighborlySettings() {
-  const [activeTab, setActiveTab] = useState("overview");
   const [activeSection, setActiveSection] = useState<string>("route");
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [optimization, setOptimization] = useState<string[]>(["cost"]);
@@ -468,23 +467,6 @@ export default function NeighborlySettings() {
             <div className="text-xs text-stone-400">Smart grocery planning</div>
           </div>
         </div>
-
-        {/* Nav tabs */}
-        <nav className="flex gap-1 bg-stone-200 rounded-full p-1">
-          {["overview", "lists", "routes", "deals"].map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 border-none cursor-pointer
-                ${activeTab === tab
-                  ? "bg-green-800 text-white shadow-sm"
-                  : "bg-transparent text-stone-500 hover:bg-stone-300 hover:text-stone-800"
-                }`}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
-        </nav>
 
         {/* Right icons */}
         <div className="flex items-center gap-4">
