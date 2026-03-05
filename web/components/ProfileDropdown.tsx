@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react"
 import { signOut } from "@/app/auth/logout/action";
+import { useRouter } from "next/navigation";
 
 interface ProfileDropdownProps {
   name: string;
@@ -10,6 +11,7 @@ interface ProfileDropdownProps {
 const ProfileDropdown = ({ name, initials }: ProfileDropdownProps) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -60,7 +62,10 @@ const ProfileDropdown = ({ name, initials }: ProfileDropdownProps) => {
         {/* Menu items */}
         <div className="p-1.5">
           <button
-            onClick={() => setProfileOpen(false)}
+            onClick={() => {
+                setProfileOpen(false); 
+                router.push('/settings')
+            }}
             className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-stone-700 hover:bg-stone-50 rounded-xl transition-colors text-left cursor-pointer"
           >
             <svg
@@ -73,6 +78,9 @@ const ProfileDropdown = ({ name, initials }: ProfileDropdownProps) => {
             </svg>
             Settings
           </button>
+
+          <div className="my-1 border-t border-stone-100" />
+
 
           <div className="my-1 border-t border-stone-100" />
 
