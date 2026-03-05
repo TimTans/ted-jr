@@ -13,7 +13,7 @@ export async function login(formData: FormData) {
   })
 
   if (error) {
-    redirect('/login?error=' + encodeURIComponent(error.message))
+    redirect('/auth/login?error=' + encodeURIComponent(error.message))
   }
 
   revalidatePath('/', 'layout')

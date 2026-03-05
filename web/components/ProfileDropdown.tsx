@@ -1,5 +1,6 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react"
+import { signOut } from "@/app/auth/logout/action";
 
 interface ProfileDropdownProps {
   name: string;
@@ -19,10 +20,6 @@ const ProfileDropdown = ({ name, initials }: ProfileDropdownProps) => {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
-
-  const handleSignOut = () => {
-    // Sign out
-  };
 
   return (
     <div ref={profileRef} className="relative">
@@ -82,7 +79,7 @@ const ProfileDropdown = ({ name, initials }: ProfileDropdownProps) => {
       
 
           <button
-            onClick={handleSignOut}
+            onClick={() => signOut()}
             className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 rounded-xl transition-colors text-left cursor-pointer"
           >
             <svg
