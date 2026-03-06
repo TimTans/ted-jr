@@ -1,7 +1,8 @@
 'use client'
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import ProfileDropdown from "@/components/ProfileDropdown";
+import { getRoutePreferences, saveRoutePreferences } from "./actions";
 
 interface DietaryOption {
   id: string;
@@ -216,7 +217,7 @@ function RouteSection({
         <SettingRow label="Search Radius" description="Only include stores within this distance">
           <div className="flex items-baseline gap-1">
             <span className="text-lg font-bold text-green-700">{radius}</span>
-            <span className="text-xs text-stone-400">mi</span>
+            <span className="text-xs text-stone-400">km</span>
           </div>
         </SettingRow>
         <div className="px-5 pb-4 pt-2">
@@ -393,6 +394,20 @@ export default function NeighborlySettings() {
   const [notifications, setNotifications] = useState<boolean>(true);
   const [communityReports, setCommunityReports] = useState<boolean>(true);
   const [saved, setSaved] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getRoutePreferences().then((data) => {
+      if (data) {
+        if (data.optimization_mode?.length) setOptimization(data.optimization_mode);
+        if (data.travel_mode?.length) setTravelMode(data.travel_mode);
+        if (data.max_radius_km != null) setRadius(data.max_radius_km);
+        if (data.max_stops != null) setMaxStops(data.max_stops);
+      }
+      setLoading(false);
+    });
+  }, []);
 
   const toggleOptimization = (id: string): void =>
     setOptimization((prev) =>
@@ -419,9 +434,20 @@ export default function NeighborlySettings() {
     setNutrients((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
   };
 
-  const handleSave = (): void => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async (): Promise<void> => {
+    setSaveError(null);
+    const result = await saveRoutePreferences({
+      optimization_mode: optimization,
+      travel_mode: travelMode,
+      max_radius_km: radius,
+      max_stops: maxStops,
+    });
+    if ('error' in result) {
+      setSaveError(result.error ?? 'Failed to save');
+    } else {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
   };
 
   const activeNav = navItems.find((n) => n.id === activeSection);
@@ -570,16 +596,22 @@ export default function NeighborlySettings() {
 
             {/* Section content */}
             {activeSection === "route" && (
-              <RouteSection
-                optimization={optimization}
-                toggleOptimization={toggleOptimization}
-                radius={radius}
-                setRadius={setRadius}
-                maxStops={maxStops}
-                setMaxStops={setMaxStops}
-                travelMode={travelMode}
-                toggleTravel={toggleTravel}
-              />
+              loading ? (
+                <div className="flex items-center justify-center py-20">
+                  <div className="w-6 h-6 border-2 border-green-700 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : (
+                <RouteSection
+                  optimization={optimization}
+                  toggleOptimization={toggleOptimization}
+                  radius={radius}
+                  setRadius={setRadius}
+                  maxStops={maxStops}
+                  setMaxStops={setMaxStops}
+                  travelMode={travelMode}
+                  toggleTravel={toggleTravel}
+                />
+              )
             )}
             {activeSection === "dietary" && (
               <DietarySection
@@ -597,7 +629,10 @@ export default function NeighborlySettings() {
 
             {/* Save button */}
             {activeSection !== "account" && (
-              <div className="mt-8 flex justify-end">
+              <div className="mt-8 flex flex-col items-end gap-2">
+                {saveError && (
+                  <p className="text-sm text-red-500">{saveError}</p>
+                )}
                 <button
                   onClick={handleSave}
                   className={`px-8 py-2.5 rounded-xl text-white text-sm font-semibold tracking-wide transition-all duration-200 active:scale-95 ${
