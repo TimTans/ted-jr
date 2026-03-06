@@ -117,10 +117,7 @@ const UserDashboard = () => {
           </div>
 
           {/* Profile */}
-          <ProfileDropdown
-            name="John Doe"
-            initials="JD"
-          />
+          <ProfileDropdown />
         </div>
       </header>
 

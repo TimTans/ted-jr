@@ -525,10 +525,7 @@ export default function NeighborlySettings() {
           </div>
 
           {/* Profile */}
-          <ProfileDropdown
-            name="John Doe"
-            initials="JD"
-          />
+          <ProfileDropdown />
         </div>
       </header>
 

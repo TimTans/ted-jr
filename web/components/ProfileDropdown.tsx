@@ -2,16 +2,24 @@
 import { useState, useRef, useEffect } from "react"
 import { signOut } from "@/app/auth/logout/action";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
-interface ProfileDropdownProps {
-  name: string;
-  initials: string;
-}
-
-const ProfileDropdown = ({ name, initials }: ProfileDropdownProps) => {
+const ProfileDropdown = () => {
   const [profileOpen, setProfileOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [initials, setInitials] = useState("");
   const profileRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const first = user?.user_metadata?.first_name ?? "";
+      const last = user?.user_metadata?.last_name ?? "";
+      setName(`${first} ${last}`.trim());
+      setInitials(`${first.charAt(0)}${last.charAt(0)}`.toUpperCase());
+    });
+  }, []);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
