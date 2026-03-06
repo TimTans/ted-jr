@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import ProfileDropdown from "@/components/ProfileDropdown";
-import { getRoutePreferences, saveRoutePreferences } from "./actions";
+import { getRoutePreferences, saveRoutePreferences, getDietaryPreferences, saveDietaryPreferences } from "./actions";
 
 interface DietaryOption {
   id: string;
@@ -398,15 +398,21 @@ export default function NeighborlySettings() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
-    getRoutePreferences().then((data) => {
-      if (data) {
-        if (data.optimization_mode?.length) setOptimization(data.optimization_mode);
-        if (data.travel_mode?.length) setTravelMode(data.travel_mode);
-        if (data.max_radius_km != null) setRadius(data.max_radius_km);
-        if (data.max_stops != null) setMaxStops(data.max_stops);
+    Promise.all([getRoutePreferences(), getDietaryPreferences()]).then(
+      ([routeData, dietaryData]) => {
+        if (routeData) {
+          if (routeData.optimization_mode?.length) setOptimization(routeData.optimization_mode);
+          if (routeData.travel_mode?.length) setTravelMode(routeData.travel_mode);
+          if (routeData.max_radius_km != null) setRadius(routeData.max_radius_km);
+          if (routeData.max_stops != null) setMaxStops(routeData.max_stops);
+        }
+        if (dietaryData) {
+          if (dietaryData.dietary?.length) setDietary(dietaryData.dietary);
+          if (dietaryData.nutrients) setNutrients(dietaryData.nutrients);
+        }
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    );
   }, []);
 
   const toggleOptimization = (id: string): void =>
@@ -436,14 +442,26 @@ export default function NeighborlySettings() {
 
   const handleSave = async (): Promise<void> => {
     setSaveError(null);
-    const result = await saveRoutePreferences({
-      optimization_mode: optimization,
-      travel_mode: travelMode,
-      max_radius_km: radius,
-      max_stops: maxStops,
-    });
-    if ('error' in result) {
-      setSaveError(result.error ?? 'Failed to save');
+    let result: { success?: boolean; error?: string };
+
+    if (activeSection === "route") {
+      result = await saveRoutePreferences({
+        optimization_mode: optimization,
+        travel_mode: travelMode,
+        max_radius_km: radius,
+        max_stops: maxStops,
+      });
+    } else if (activeSection === "dietary") {
+      result = await saveDietaryPreferences({
+        dietary,
+        nutrients,
+      });
+    } else {
+      result = { success: true };
+    }
+
+    if ('error' in result && result.error) {
+      setSaveError(result.error);
     } else {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -614,10 +632,16 @@ export default function NeighborlySettings() {
               )
             )}
             {activeSection === "dietary" && (
-              <DietarySection
-                dietary={dietary} toggleDietary={toggleDietary}
-                nutrients={nutrients} updateNutrient={updateNutrient}
-              />
+              loading ? (
+                <div className="flex items-center justify-center py-20">
+                  <div className="w-6 h-6 border-2 border-green-700 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : (
+                <DietarySection
+                  dietary={dietary} toggleDietary={toggleDietary}
+                  nutrients={nutrients} updateNutrient={updateNutrient}
+                />
+              )
             )}
             {activeSection === "notifications" && (
               <NotificationsSection
