@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    kotlin("plugin.serialization") version "1.9.25"
 }
 
 android {
@@ -15,6 +16,26 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Supabase keys from android/.env (copy from .env.example)
+        val envFile = rootProject.file(".env")
+        var supabaseUrl = "https://placeholder.supabase.co"
+        var supabaseAnonKey = ""
+        if (envFile.exists()) {
+            envFile.readLines()
+                .filter { it.contains("=") && !it.trim().startsWith("#") }
+                .forEach { line ->
+                    val parts = line.split("=", limit = 2)
+                    if (parts.size == 2) {
+                        when (parts[0].trim()) {
+                            "SUPABASE_URL" -> supabaseUrl = parts[1].trim().removeSurrounding("\"")
+                            "SUPABASE_ANON_KEY" -> supabaseAnonKey = parts[1].trim().removeSurrounding("\"")
+                        }
+                    }
+                }
+        }
+        buildConfigField("String", "SUPABASE_URL", "\"${supabaseUrl.replace("\"", "\\\"")}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${supabaseAnonKey.replace("\"", "\\\"")}\"")
     }
 
     buildTypes {
@@ -36,6 +57,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.15"
@@ -47,6 +69,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
 
     // Jetpack Compose
     implementation(platform("androidx.compose:compose-bom:2024.10.00"))
@@ -59,6 +82,11 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+
+    // Supabase
+    implementation(platform("io.github.jan-tennert.supabase:bom:2.0.2"))
+    implementation("io.github.jan-tennert.supabase:gotrue-kt")
+    implementation("io.ktor:ktor-client-android:2.3.7")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

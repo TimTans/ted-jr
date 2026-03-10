@@ -25,6 +25,8 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,7 +43,7 @@ private val NeighborlyGreenSoft = Color(0xFFE0F1E8)
 
 @Composable
 fun LoginScreen(viewModel: LoginViewModel) {
-    val state = viewModel.uiState
+    val state by viewModel.uiState.collectAsState()
 
     LoginContent(
         state = state,

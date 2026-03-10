@@ -6,6 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.example.android.ui.home.HomeScreen
 import com.example.android.ui.login.LoginScreen
 import com.example.android.viewmodel.home.HomeViewModel
@@ -20,7 +22,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface {
-                    val loginState = loginViewModel.uiState
+                    val loginState by loginViewModel.uiState.collectAsState()
                     if (loginState.isLoggedIn) {
                         HomeScreen(viewModel = homeViewModel)
                     } else {
