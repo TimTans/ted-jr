@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 data class LoginUiState(
     val isSignUp: Boolean = false,
@@ -65,7 +67,7 @@ class LoginViewModel : ViewModel() {
                     supabase.auth.signUpWith(Email) {
                         email = state.email
                         password = state.password
-                        data = buildMap {
+                        data = buildJsonObject {
                             if (state.name.isNotBlank()) put("full_name", state.name)
                         }
                     }
