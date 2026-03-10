@@ -8,7 +8,9 @@ struct GroceryListView: View {
     @Query(sort: \GroceryListItem.dateAdded, order: .reverse) private var items: [GroceryListItem]
 
     @State private var searchText = ""
+    @State private var isSearchFocused = false
     @State private var allProducts: [ShopRiteItem] = []
+    @State private var selectedItem: GroceryListItem?
 
     private var filteredProducts: [ShopRiteItem] {
         guard !searchText.isEmpty else { return [] }
@@ -20,10 +22,6 @@ struct GroceryListView: View {
         )
     }
 
-    private var total: Double {
-        items.reduce(0) { $0 + $1.price * Double($1.quantity) }
-    }
-
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
@@ -31,11 +29,15 @@ struct GroceryListView: View {
                     .ignoresSafeArea()
 
                 VStack(spacing: 0) {
+                    // Search bar
                     searchBar
-                    searchResults
+                        .zIndex(1)
 
-                    if items.isEmpty {
+                    if items.isEmpty && filteredProducts.isEmpty {
                         emptyState
+                    } else if !filteredProducts.isEmpty {
+                        // Search results as main content (not overlay)
+                        searchResultsList
                     } else {
                         groceryList
                     }
@@ -43,6 +45,10 @@ struct GroceryListView: View {
             }
             .navigationTitle("Grocery List")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(item: $selectedItem) { item in
+                ItemDetailSheet(item: item, allProducts: allProducts)
+                    .presentationDetents([.medium])
+            }
         }
         .onAppear {
             if allProducts.isEmpty {
@@ -58,7 +64,7 @@ struct GroceryListView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(NeighborlyTheme.textMuted)
 
-            TextField("Search ShopRite products...", text: $searchText)
+            TextField("Search products to add...", text: $searchText)
                 .textFieldStyle(.plain)
                 .autocorrectionDisabled()
 
@@ -71,54 +77,67 @@ struct GroceryListView: View {
                 }
             }
         }
-        .padding(10)
+        .padding(12)
         .background(NeighborlyTheme.cardBackground)
-        .cornerRadius(10)
-        .padding(.horizontal)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+        .padding(.horizontal, 16)
         .padding(.top, 8)
+        .padding(.bottom, 4)
     }
 
-    // MARK: - Search Results Dropdown
+    // MARK: - Search Results
 
-    private var searchResults: some View {
-        Group {
-            if !filteredProducts.isEmpty {
-                VStack(spacing: 0) {
-                    ForEach(filteredProducts) { product in
-                        Button {
-                            addOrIncrement(product)
-                            searchText = ""
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(product.name)
-                                        .font(.subheadline)
-                                        .foregroundStyle(NeighborlyTheme.textPrimary)
-                                        .lineLimit(1)
-                                    Text(product.unitSize)
-                                        .font(.caption)
-                                        .foregroundStyle(NeighborlyTheme.textMuted)
-                                }
-                                Spacer()
+    private var searchResultsList: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(filteredProducts) { product in
+                    Button {
+                        addOrIncrement(product)
+                        searchText = ""
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(NeighborlyTheme.green)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(product.name)
+                                    .font(.subheadline)
+                                    .foregroundStyle(NeighborlyTheme.textPrimary)
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.leading)
+                                Text(product.unitSize)
+                                    .font(.caption)
+                                    .foregroundStyle(NeighborlyTheme.textMuted)
+                            }
+
+                            Spacer()
+
+                            // Show ShopRite price as hint
+                            VStack(alignment: .trailing, spacing: 2) {
                                 Text(product.price, format: .currency(code: "USD"))
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(NeighborlyTheme.green)
+                                Text("ShopRite")
+                                    .font(.caption2)
+                                    .foregroundStyle(NeighborlyTheme.textMuted)
                             }
-                            .padding(.horizontal)
-                            .padding(.vertical, 10)
                         }
-                        if product.id != filteredProducts.last?.id {
-                            Divider()
-                                .padding(.leading)
-                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                    }
+
+                    if product.id != filteredProducts.last?.id {
+                        Divider()
+                            .padding(.leading, 52)
                     }
                 }
-                .background(NeighborlyTheme.cardBackground)
-                .cornerRadius(10)
-                .shadow(color: .black.opacity(0.1), radius: 4, y: 2)
-                .padding(.horizontal)
-                .padding(.top, 4)
             }
+            .background(NeighborlyTheme.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
         }
     }
 
@@ -148,20 +167,24 @@ struct GroceryListView: View {
             ForEach(items) { item in
                 GroceryItemRow(item: item)
                     .listRowBackground(NeighborlyTheme.cardBackground)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedItem = item
+                    }
             }
             .onDelete(perform: deleteItems)
 
-            // Total row
+            // Item count footer
             HStack {
-                Text("Total")
-                    .font(.headline)
-                    .foregroundStyle(NeighborlyTheme.textPrimary)
+                Text("\(items.count) item\(items.count == 1 ? "" : "s")")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(NeighborlyTheme.textSecondary)
                 Spacer()
-                Text(total, format: .currency(code: "USD"))
-                    .font(.headline)
-                    .foregroundStyle(NeighborlyTheme.green)
+                Text("Tap item for prices")
+                    .font(.caption)
+                    .foregroundStyle(NeighborlyTheme.textMuted)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
             .listRowBackground(NeighborlyTheme.greenSoft)
         }
         .listStyle(.insetGrouped)
@@ -186,19 +209,14 @@ struct GroceryListView: View {
     }
 }
 
-// MARK: - Grocery Item Row
+// MARK: - Grocery Item Row (no price, just name + quantity)
 
 struct GroceryItemRow: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var item: GroceryListItem
 
-    private var lineTotal: Double {
-        item.price * Double(item.quantity)
-    }
-
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            // Item info
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
                     .font(.subheadline)
@@ -243,13 +261,114 @@ struct GroceryItemRow: View {
                 .buttonStyle(.plain)
             }
 
-            // Line total
-            Text(lineTotal, format: .currency(code: "USD"))
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(NeighborlyTheme.green)
-                .frame(minWidth: 60, alignment: .trailing)
+            // Chevron hint for tap
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(NeighborlyTheme.textMuted)
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Item Detail Sheet (price comparison)
+
+struct ItemDetailSheet: View {
+    let item: GroceryListItem
+    let allProducts: [ShopRiteItem]
+
+    private var shopRitePrice: Double? {
+        allProducts.first(where: { $0.upc == item.upc })?.price
+    }
+
+    // Placeholder stores for demo — only ShopRite has real data
+    private var storePrices: [(store: String, price: Double?, isReal: Bool)] {
+        [
+            ("ShopRite", shopRitePrice, true),
+            ("Aldi", shopRitePrice.map { $0 * 0.92 }, false),       // simulated
+            ("Trader Joe's", shopRitePrice.map { $0 * 1.05 }, false) // simulated
+        ]
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Handle
+            Capsule()
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: 36, height: 5)
+                .padding(.top, 10)
+
+            VStack(alignment: .leading, spacing: 16) {
+                // Item header
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.name)
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(NeighborlyTheme.textPrimary)
+                    Text(item.unitSize)
+                        .font(.subheadline)
+                        .foregroundStyle(NeighborlyTheme.textMuted)
+                    Text("Qty: \(item.quantity)")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(NeighborlyTheme.textSecondary)
+                }
+
+                Divider()
+
+                // Store prices
+                Text("PRICES BY STORE")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(NeighborlyTheme.textMuted)
+                    .tracking(0.5)
+
+                VStack(spacing: 10) {
+                    ForEach(storePrices, id: \.store) { entry in
+                        HStack {
+                            Circle()
+                                .fill(entry.store == "ShopRite" ? NeighborlyTheme.green : NeighborlyTheme.orange)
+                                .frame(width: 8, height: 8)
+
+                            Text(entry.store)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(NeighborlyTheme.textPrimary)
+
+                            if !entry.isReal {
+                                Text("est.")
+                                    .font(.caption2)
+                                    .foregroundStyle(NeighborlyTheme.textMuted)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(NeighborlyTheme.background)
+                                    .clipShape(Capsule())
+                            }
+
+                            Spacer()
+
+                            if let price = entry.price {
+                                Text(price, format: .currency(code: "USD"))
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(entry.isReal ? NeighborlyTheme.green : NeighborlyTheme.textSecondary)
+                            } else {
+                                Text("—")
+                                    .font(.subheadline)
+                                    .foregroundStyle(NeighborlyTheme.textMuted)
+                            }
+                        }
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 14)
+                        .background(NeighborlyTheme.cardBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+
+                Text("Real prices from ShopRite. Other stores coming soon.")
+                    .font(.caption)
+                    .foregroundStyle(NeighborlyTheme.textMuted)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .padding(20)
+
+            Spacer()
+        }
+        .background(NeighborlyTheme.background)
     }
 }
 
