@@ -235,7 +235,7 @@ export default async function RegisterPage({
             <p className="text-[0.84rem]" style={{ color: "#9b9283" }}>
               Already have an account?{" "}
               <Link
-                href="/login"
+                href="/auth/login"
                 className="nb-link font-medium underline underline-offset-2"
               >
                 Sign in

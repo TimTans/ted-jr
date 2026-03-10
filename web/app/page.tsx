@@ -194,8 +194,8 @@ export default function NeighborlyHomepage() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <Link href="/login" className="desktop-only" style={{ textDecoration: "none", color: COLORS.textSec, fontSize: 14, fontWeight: 600, padding: "10px 16px" }}>Sign In</Link>
-            <Link href="register" className="btn-primary" style={{ padding: "10px 22px", fontSize: 13 }}>Get Started</Link>
+            <Link href="/auth/login" className="desktop-only" style={{ textDecoration: "none", color: COLORS.textSec, fontSize: 14, fontWeight: 600, padding: "10px 16px" }}>Sign In</Link>
+            <Link href="/auth/register" className="btn-primary" style={{ padding: "10px 22px", fontSize: 13 }}>Get Started</Link>
           </div>
         </div>
       </nav>
