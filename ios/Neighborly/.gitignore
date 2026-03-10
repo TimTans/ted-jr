@@ -23,3 +23,6 @@ Pods/
 
 # Carthage
 Carthage/Build/
+
+# Config Secrets
+Config/Secrets.xcconfig
