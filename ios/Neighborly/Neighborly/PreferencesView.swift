@@ -256,8 +256,6 @@ struct PreferencesOneScrollView: View {
                     }
                 }
 
-                // Bottom bar if you want it
-                BottomTabBar()
             }
             .navigationTitle("Your Preferences")
             .navigationBarTitleDisplayMode(.inline)
@@ -414,54 +412,6 @@ struct WellnessSection: View {
                 .fill(Color.white)
                 .shadow(color: .black.opacity(0.03), radius: 10, x: 0, y: 5)
         )
-    }
-}
-
-// MARK: - Bottom Tab Bar (same as before)
-
-struct BottomTabBar: View {
-    var body: some View {
-        VStack {
-            Spacer()
-
-            ZStack {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(Color.white)
-                    .shadow(color: .black.opacity(0.06), radius: 16, x: 0, y: -2)
-                    .frame(height: 74)
-                    .padding(.horizontal, 18)
-
-                HStack {
-                    Spacer()
-                    Image(systemName: "house")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(.secondary)
-
-                    Spacer()
-
-                    Circle()
-                        .fill(Color.gray.opacity(0.25))
-                        .frame(width: 56, height: 56)
-                        .overlay(
-                            Image(systemName: "plus")
-                                .font(.system(size: 22, weight: .bold))
-                                .foregroundStyle(.secondary)
-                        )
-                        .offset(y: -8)
-
-                    Spacer()
-
-                    Image(systemName: "person")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-                .padding(.horizontal, 34)
-                .frame(height: 74)
-            }
-            .padding(.bottom, 12)
-        }
-        .ignoresSafeArea(edges: .bottom)
     }
 }
 
