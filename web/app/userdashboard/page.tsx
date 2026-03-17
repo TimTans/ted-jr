@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import ProfileDropdown from "@/components/ProfileDropdown";
 
 const UserDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
@@ -115,11 +116,8 @@ const UserDashboard = () => {
             <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-600 border-2 border-[#F7F5F0]"/>
           </div>
 
-          {/* Avatar */}
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm cursor-pointer select-none"
-            style={{ background: "linear-gradient(135deg, #D4700A, #F4A261)" }}
-          >ET</div>
+          {/* Profile */}
+          <ProfileDropdown />
         </div>
       </header>
 
