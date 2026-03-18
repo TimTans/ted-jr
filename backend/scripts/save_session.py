@@ -28,11 +28,14 @@ async def main():
     SESSION_PATH.parent.mkdir(exist_ok=True)
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        browser = await p.chromium.launch(
+            headless=False,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
         context = await browser.new_context(user_agent=USER_AGENT)
         page = await context.new_page()
 
-        print("opening shoprite.com — please solve the cloudflare challenge.")
+        print("opening shoprite.com - please solve the cloudflare challenge.")
         print("the script will auto-detect when you're through.\n")
 
         await page.goto(LANDING_URL, wait_until="domcontentloaded")
