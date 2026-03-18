@@ -1,9 +1,15 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import ProfileDropdown from "@/components/ProfileDropdown";
+import { getWeeklyBudget, saveWeeklyBudget } from "./actions";
 
 const UserDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
+  const [weeklyBudget, setWeeklyBudget] = useState<number | null>(null);
+  const [budgetDraft, setBudgetDraft] = useState("");
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const [budgetSaving, setBudgetSaving] = useState(false);
+  const [budgetError, setBudgetError] = useState<string | null>(null);
 
   const groceryList = [
     { name: "Organic Bananas", qty: "1 bunch", bestPrice: 1.29, store: "Trader Joe's", saved: 0.70 },
@@ -41,6 +47,59 @@ const UserDashboard = () => {
 
   const itemDotColor = (i: number) =>
     i < 2 ? "bg-green-700" : i < 4 ? "bg-orange-600" : "bg-blue-700";
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const b = await getWeeklyBudget();
+        if (!alive) return;
+        const next = typeof b === "number" && Number.isFinite(b) ? b : 120;
+        setWeeklyBudget(next);
+        setBudgetDraft(next.toFixed(2));
+      } catch {
+        if (!alive) return;
+        setWeeklyBudget(120);
+        setBudgetDraft("120.00");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const weeklySpent = 57.31;
+  const budgetPercent = useMemo(() => {
+    if (!weeklyBudget || weeklyBudget <= 0) return 0;
+    return Math.max(0, Math.min(100, (weeklySpent / weeklyBudget) * 100));
+  }, [weeklyBudget]);
+
+  const remaining = useMemo(() => {
+    if (!weeklyBudget || weeklyBudget <= 0) return null;
+    return Math.max(0, weeklyBudget - weeklySpent);
+  }, [weeklyBudget]);
+
+  async function onSaveBudget() {
+    setBudgetError(null);
+    const parsed = Number.parseFloat(budgetDraft);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setBudgetError("Enter a valid budget amount.");
+      return;
+    }
+
+    setBudgetSaving(true);
+    const res = await saveWeeklyBudget(parsed);
+    setBudgetSaving(false);
+
+    if ("error" in res && res.error) {
+      setBudgetError(res.error);
+      return;
+    }
+
+    setWeeklyBudget(parsed);
+    setBudgetDraft(parsed.toFixed(2));
+    setIsEditingBudget(false);
+  }
 
   return (
     <div
@@ -149,25 +208,85 @@ const UserDashboard = () => {
 
         {/* ── Budget Overview ── */}
         <div className="bg-white rounded-2xl p-7 border border-black/[0.05] hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-stone-400 mb-4">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-            </svg>
-            Weekly Budget
+        <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-stone-400">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+              Weekly Budget
+            </div>
+
+            {!isEditingBudget ? (
+              <button
+                onClick={() => {
+                  setBudgetError(null);
+                  setIsEditingBudget(true);
+                }}
+                className="border border-green-800 text-green-800 bg-transparent px-3.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer hover:bg-green-50 transition-colors"
+              >
+                Edit
+              </button>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setBudgetError(null);
+                    setIsEditingBudget(false);
+                    if (weeklyBudget != null) setBudgetDraft(weeklyBudget.toFixed(2));
+                  }}
+                  className="border border-stone-300 text-stone-600 bg-transparent px-3.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer hover:bg-stone-50 transition-colors"
+                  disabled={budgetSaving}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={onSaveBudget}
+                  className="bg-green-800 text-white border-none px-3.5 py-1.5 rounded-xl text-xs font-semibold cursor-pointer hover:bg-green-900 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  disabled={budgetSaving}
+                >
+                  {budgetSaving ? "Saving…" : "Save"}
+                </button>
+              </div>
+            )}
           </div>
           <div className="flex items-end gap-3 mb-4">
-            <div className="fraunces text-[42px] font-semibold leading-none text-green-800">$57.31</div>
-            <div className="text-sm text-stone-400 pb-1.5">of $120.00</div>
-          </div>
+          <div className="fraunces text-[42px] font-semibold leading-none text-green-800">${weeklySpent.toFixed(2)}</div>
+            <div className="text-sm text-stone-400 pb-1.5">
+              of ${weeklyBudget == null ? "—" : weeklyBudget.toFixed(2)}
+            </div>
+            </div>
+
+            {isEditingBudget && (
+            <div className="mb-4">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-sm">$</span>
+                  <input
+                    value={budgetDraft}
+                    onChange={(e) => setBudgetDraft(e.target.value)}
+                    inputMode="decimal"
+                    className="w-full rounded-xl border border-stone-200 bg-white px-8 py-2 text-sm outline-none focus:border-green-700"
+                    placeholder="120.00"
+                    aria-label="Weekly budget"
+                    disabled={budgetSaving}
+                  />
+                </div>
+              </div>
+              {budgetError && <div className="mt-2 text-xs font-semibold text-red-600">{budgetError}</div>}
+            </div>
+          )}
+
           <div className="bg-stone-100 rounded-full h-2.5 overflow-hidden mb-3">
             <div
               className="h-full rounded-full"
-              style={{ width: "47.8%", background: "linear-gradient(90deg, #2D6A4F, #52B788)" }}
+              style={{ width: `${budgetPercent.toFixed(1)}%`, background: "linear-gradient(90deg, #2D6A4F, #52B788)" }}
             />
           </div>
           <div className="flex justify-between">
-            <span className="text-sm text-green-800 font-semibold">47.8% spent</span>
-            <span className="text-sm text-stone-400">$62.69 remaining</span>
+          <span className="text-sm text-green-800 font-semibold">{budgetPercent.toFixed(1)}% spent</span>
+            <span className="text-sm text-stone-400">
+              {remaining == null ? "— remaining" : `$${remaining.toFixed(2)} remaining`}
+            </span>
           </div>
         </div>
 
