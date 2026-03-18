@@ -1,29 +1,25 @@
 """
-standalone runner for the shoprite scraper
+multi-store, multi-category shoprite scraper runner.
 
 usage (from the backend/ directory):
     PYTHONPATH=. uv run python scripts/scrape_shoprite.py
 
-output:
-    - stdout: summary (product count, store, duration)
-    - file:   data/shoprite_<store_id>_<timestamp>.json
+    # scrape a single store:
+    PYTHONPATH=. uv run python scripts/scrape_shoprite.py --store 218
 
-# Future (database output): replace the JSON write block with:
-#
-#   from sqlalchemy.ext.asyncio import AsyncSession
-#   from app.db.engine import engine  # async sqlalchemy engine
-#   from app.models.product import ProductORM
-#
-#   async with AsyncSession(engine) as session:
-#       orm_rows = [ProductORM(**p.to_dict()) for p in products]
-#       session.add_all(orm_rows)
-#       await session.commit()
-#   print(f"inserted {len(products)} rows into database")
-#
-# add an upsert strategy (ON CONFLICT DO UPDATE) so re runs update prices
-# rather than inserting duplicates.
+    # scrape a single category:
+    PYTHONPATH=. uv run python scripts/scrape_shoprite.py --category milk
+
+    # write to supabase (default writes to JSON files):
+    PYTHONPATH=. uv run python scripts/scrape_shoprite.py --db
+
+output:
+    - stdout: summary per store/category
+    - file:   data/shoprite_<store_id>_<category>_<timestamp>.json (unless --db)
+    - or:     supabase upserts (with --db flag)
 """
 
+import argparse
 import asyncio
 import json
 import logging
@@ -32,7 +28,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.scraper.shoprite import StoreConfig, scrape_store
+from app.scraper.shoprite import StoreConfig, scrape_store, CloudflareBlockedError, USER_AGENT
+from app.scraper.config import STORES, CATEGORIES, build_browse_url, StoreInfo, CategoryConfig
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,88 +37,196 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# store configuration — single store + category hardcoded for now.
-#
-# to find store_id and category_id: open shoprite.com in chrome, set your
-# store, browse a product category, and inspect the network tab for requests
-# to storefrontgateway.shoprite.com/api/stores/{store_id}/categories/{category_id}/search
-#
-# Future (multi-store): define a list[StoreConfig] and run concurrently:
-#   STORES = [
-#       StoreConfig(store_id="139", zip_code="07030", category_id="520592", breadcrumb="grocery/dairy/milk"),
-#       StoreConfig(store_id="200", zip_code="07302", category_id="520592", breadcrumb="grocery/dairy/milk"),
-#   ]
-#   results = await asyncio.gather(*[scrape_store(s) for s in STORES])
-# ---------------------------------------------------------------------------
-STORE = StoreConfig(
-    store_id="139",
-    zip_code="07030",
-    category_id="520592",
-    breadcrumb="grocery/dairy/milk",
-    browse_url=(
-        "https://www.shoprite.com/sm/pickup/rsid/139"
-        "/categories/dairy/milk-id-520592"
-        "?f=Breadcrumb%3Agrocery%2Fdairy%2Fmilk"
-    ),
-)
-
 OUTPUT_DIR = Path(__file__).parent.parent / "data"
 SESSION_PATH = OUTPUT_DIR / "shoprite_session.json"
+LANDING_URL = "https://www.shoprite.com/sm/pickup/rsid/204/categories"
+
+
+async def refresh_session() -> None:
+    """
+    open a visible browser so the user can solve the cloudflare challenge.
+    saves the new session to SESSION_PATH, then the scraper resumes.
+    """
+    from playwright.async_api import async_playwright
+
+    print("\n" + "=" * 60)
+    print("SESSION EXPIRED - opening browser for Cloudflare verification.")
+    print("Please solve the challenge, then the scrape will resume.")
+    print("=" * 60 + "\n")
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=False,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        context = await browser.new_context(user_agent=USER_AGENT)
+        page = await context.new_page()
+
+        await page.goto(LANDING_URL, wait_until="domcontentloaded")
+
+        # wait up to 120 seconds for the user to solve the challenge
+        for _ in range(120):
+            title = await page.title()
+            if "just a moment" not in title.lower():
+                break
+            await page.wait_for_timeout(1000)
+        else:
+            print("ERROR: timed out waiting for challenge. Aborting.")
+            await browser.close()
+            raise RuntimeError("cloudflare challenge timed out")
+
+        await context.storage_state(path=str(SESSION_PATH))
+        print(f"\nSession refreshed and saved to: {SESSION_PATH}")
+        print("Resuming scrape...\n")
+        await browser.close()
+
+
+async def scrape_category(
+    store: StoreInfo,
+    category: CategoryConfig,
+    write_db: bool = False,
+) -> dict:
+    """
+    scrape one store + category combination.
+    returns summary dict with product count and timing.
+    """
+    config = StoreConfig(
+        store_id=store.store_id,
+        zip_code=store.zip_code,
+        browse_url=build_browse_url(store, category),
+    )
+
+    start = time.monotonic()
+
+    # headed mode (headless=False) avoids cloudflare blocking on pagination.
+    # to switch to headless, pass headless=True - but cloudflare may block
+    # page 2+ requests. see scrape_store() docstring for details.
+    products = await scrape_store(
+        config,
+        session_state=SESSION_PATH if SESSION_PATH.exists() else None,
+        headless=False,
+    )
+
+    elapsed = time.monotonic() - start
+
+    if write_db:
+        from app.scraper.db_writer import (
+            ensure_store_exists,
+            ensure_category_exists,
+            upsert_products,
+        )
+        store_uuid = await ensure_store_exists(store)
+        cat_uuid = await ensure_category_exists(category)
+        db_result = await upsert_products(products, store_uuid, cat_uuid)
+        logger.info(
+            "DB: %d products upserted, %d prices upserted for %s/%s",
+            db_result["products_upserted"],
+            db_result["prices_upserted"],
+            store.name,
+            category.name,
+        )
+    else:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        output_path = OUTPUT_DIR / f"shoprite_{store.store_id}_{category.slug}_{timestamp}.json"
+        output_path.write_text(
+            json.dumps([p.to_dict() for p in products], indent=2),
+            encoding="utf-8",
+        )
+        logger.info("wrote %d products to %s", len(products), output_path)
+
+    return {
+        "store": store.name,
+        "category": category.name,
+        "products": len(products),
+        "duration": round(elapsed, 1),
+    }
 
 
 async def main() -> int:
-    """returns exit code: 0 on success, 1 on failure."""
+    parser = argparse.ArgumentParser(description="Scrape ShopRite products")
+    parser.add_argument("--store", type=str, help="scrape only this store_id (e.g. 218)")
+    parser.add_argument("--category", type=str, help="scrape only this category slug (e.g. milk)")
+    parser.add_argument("--db", action="store_true", help="write to supabase instead of JSON files")
+    args = parser.parse_args()
+
     OUTPUT_DIR.mkdir(exist_ok=True)
 
-    logger.info(
-        "starting shoprite scrape | store: %s | category: %s | zip: %s",
-        STORE.store_id,
-        STORE.category_id,
-        STORE.zip_code,
-    )
-
-    if SESSION_PATH.exists():
-        logger.info("using saved session: %s", SESSION_PATH)
-    else:
+    if not SESSION_PATH.exists():
         logger.warning(
-            "no session file found at %s — cloudflare may block this request. "
+            "no session file found at %s - cloudflare may block this request. "
             "run `PYTHONPATH=. uv run python scripts/save_session.py` to create one.",
             SESSION_PATH,
         )
 
-    start = time.monotonic()
+    # filter stores/categories if requested
+    stores = STORES
+    categories = CATEGORIES
 
-    try:
-        products = await scrape_store(
-            STORE,
-            session_state=SESSION_PATH if SESSION_PATH.exists() else None,
-        )
-    except RuntimeError as e:
-        # zero product guard —> scrape loop completed but collected nothing.
-        # check store_id, category_id, and breadcrumb in STORE config.
-        logger.error("%s", e)
-        return 1
-    except Exception as e:
-        logger.error("scrape failed for store %s: %s", STORE.store_id, e)
-        return 1
+    if args.store:
+        stores = [s for s in STORES if s.store_id == args.store]
+        if not stores:
+            logger.error("unknown store_id: %s", args.store)
+            return 1
 
-    elapsed = time.monotonic() - start
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    output_path = OUTPUT_DIR / f"shoprite_{STORE.store_id}_{timestamp}.json"
+    if args.category:
+        categories = [c for c in CATEGORIES if c.slug == args.category]
+        if not categories:
+            logger.error("unknown category slug: %s", args.category)
+            return 1
 
-    output_path.write_text(
-        json.dumps([p.to_dict() for p in products], indent=2),
-        encoding="utf-8",
-    )
+    total_start = time.monotonic()
+    results = []
 
-    print(f"\n{'=' * 50}")
-    print("ShopRite Scrape Complete")
-    print(f"  Store:    {STORE.store_id} (zip {STORE.zip_code})")
-    print(f"  Products: {len(products)}")
-    print(f"  Duration: {elapsed:.1f}s")
-    print(f"  Output:   {output_path}")
-    print(f"{'=' * 50}\n")
+    for store in stores:
+        for category in categories:
+            logger.info("scraping %s / %s ...", store.name, category.name)
+            try:
+                result = await scrape_category(store, category, write_db=args.db)
+                results.append(result)
+            except CloudflareBlockedError:
+                # session expired - refresh and retry this category
+                logger.warning("cloudflare blocked %s / %s - refreshing session...", store.name, category.name)
+                try:
+                    await refresh_session()
+                    # retry the same category with the new session
+                    result = await scrape_category(store, category, write_db=args.db)
+                    results.append(result)
+                except Exception as retry_err:
+                    logger.error("retry FAILED %s / %s: %s", store.name, category.name, retry_err)
+                    results.append({
+                        "store": store.name,
+                        "category": category.name,
+                        "products": 0,
+                        "duration": 0,
+                        "error": str(retry_err),
+                    })
+            except Exception as e:
+                logger.error("FAILED %s / %s: %s", store.name, category.name, e)
+                results.append({
+                    "store": store.name,
+                    "category": category.name,
+                    "products": 0,
+                    "duration": 0,
+                    "error": str(e),
+                })
+
+    total_elapsed = time.monotonic() - total_start
+
+    # print summary
+    print(f"\n{'=' * 60}")
+    print("ShopRite Multi-Store Scrape Complete")
+    print(f"{'=' * 60}")
+    total_products = 0
+    for r in results:
+        status = f"{r['products']} products in {r['duration']}s"
+        if "error" in r:
+            status = f"FAILED: {r['error']}"
+        print(f"  {r['store']:30s} | {r['category']:25s} | {status}")
+        total_products += r["products"]
+    print(f"{'─' * 60}")
+    print(f"  Total: {total_products} products | {total_elapsed:.1f}s")
+    print(f"  Output: {'Supabase' if args.db else 'JSON files in data/'}")
+    print(f"{'=' * 60}\n")
 
     return 0
 
