@@ -1,7 +1,10 @@
 """
 multi-store, multi-category scrape configuration.
 
-category_id and url_path come from shoprite.com — browse to a category with
+category_id and url_path come from shoprite.com
+
+manually:
+browse to a category with
 your store selected and extract from the URL:
 
 /sm/planning/rsid/{store_id}/categories/{url_path}-id-{category_id}?f=Breadcrumb:...

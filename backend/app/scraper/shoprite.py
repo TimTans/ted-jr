@@ -201,7 +201,7 @@ async def scrape_store(
 
         to switch back to headless:
           1. set headless=True here (or pass headless=True from the caller)
-          2. cloudflare may block pagination — if so, try increasing the
+          2. cloudflare may block pagination(IF USING VPN USE RESIDENTIAL IP) if so, try increasing the
              wait_for_timeout delay (currently 2000ms) to 5000-10000ms
           3. if still blocked, headless needs session cookies from
              save_session.py and the anti-detection args below
@@ -225,7 +225,7 @@ async def scrape_store(
     async with async_playwright() as p:
         # cloudflare binds cf_clearance to the TLS/browser fingerprint.
         # headed mode avoids fingerprint mismatch entirely. if switching
-        # to headless=True, keep the anti-detection args below — they
+        # to headless=True(switch back if you stop scraping after second page) keep the anti-detection args below they
         # suppress automation signals that cloudflare checks.
         browser = await p.chromium.launch(
             headless=headless,
@@ -311,7 +311,7 @@ async def scrape_store(
     if not products:
         raise RuntimeError(
             f"scrape completed for store {config.store_id} / category "
-            f"{config.category_id} but no products were collected — "
+            f"{config.category_id} but no products were collected - "
             "check browse_url in StoreConfig. if cloudflare is active, "
             "run scripts/save_session.py to refresh session cookies."
         )

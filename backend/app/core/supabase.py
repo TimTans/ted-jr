@@ -1,7 +1,7 @@
 """
 shared supabase client instance.
 
-uses the service role key (not anon key) because this is a trusted backend —
+uses the service role key (not anon key) because this is a trusted backend
 it needs to bypass row level security for operations like upserting scraped
 products and reading across all users' grocery lists.
 
