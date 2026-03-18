@@ -2,11 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routes import fdc
+from app.routes import fdc, products, stores, categories, grocery_lists, scraper
 
 app = FastAPI(
     title="Neighborly API",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -17,8 +17,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 app.include_router(fdc.router)
+app.include_router(products.router)
+app.include_router(stores.router)
+app.include_router(categories.router)
+app.include_router(grocery_lists.router)
+app.include_router(scraper.router)
 
 
 @app.get("/health", tags=["health"])
