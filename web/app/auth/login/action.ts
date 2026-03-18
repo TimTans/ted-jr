@@ -28,6 +28,6 @@ export async function login(formData: FormData) {
   }
 
   // Default: shopper
-  revalidatePath('/userdashboard', 'layout')
-  redirect('/userdashboard')
+  revalidatePath('/dashboard', 'layout')
+  redirect('/dashboard')
 }
