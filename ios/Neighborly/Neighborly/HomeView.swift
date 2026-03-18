@@ -4,6 +4,7 @@ import Auth
 struct HomeView: View {
     @Environment(AuthController.self) private var authController
     @State private var viewModel = HomeViewModel()
+    @State private var showPreferences = false
 
     private var displayName: String {
         let user = authController.currentUser
@@ -24,18 +25,23 @@ struct HomeView: View {
     }
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: 18) {
-                homeTopBar
-                heroCard
-                metricsGrid
-                optimizedRouteCard
+        NavigationStack {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 18) {
+                    homeTopBar
+                    heroCard
+                    metricsGrid
+                    optimizedRouteCard
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
+            .background(NeighborlyTheme.background.ignoresSafeArea())
+            .navigationDestination(isPresented: $showPreferences) {
+                PreferencesView()
+            }
         }
-        .background(NeighborlyTheme.background.ignoresSafeArea())
     }
 
     // MARK: - Top Bar
@@ -90,6 +96,12 @@ struct HomeView: View {
             // Avatar with sign-out menu
             Menu {
                 Text(displayName)
+                Divider()
+                Button {
+                    showPreferences = true
+                } label: {
+                    Label("Preferences", systemImage: "person.crop.circle")
+                }
                 Divider()
                 Button(role: .destructive) {
                     Task { await authController.signOut() }
