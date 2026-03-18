@@ -12,79 +12,46 @@ struct LoginView: View {
     @State private var isLoading = false
     @State private var showConfirmationAlert = false
 
+    private let brandGreen = Color(red: 0.06, green: 0.49, blue: 0.32)
+    private let lightGreen = Color(red: 0.84, green: 0.91, blue: 0.87)
+    private let backgroundColor = Color(red: 0.94, green: 0.93, blue: 0.91)
+    private let borderColor = Color.gray.opacity(0.55)
+
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        ZStack {
+            backgroundColor
+                .ignoresSafeArea()
 
-            Text("Neighborly")
-                .font(.largeTitle)
-                .fontWeight(.bold)
+            VStack {
+                Spacer()
 
-            Picker("Mode", selection: $isSignUp) {
-                Text("Log In").tag(false)
-                Text("Sign Up").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
+                VStack(spacing: 24) {
+                    headerSection
+                    modeToggle
+                    formSection
 
-            VStack(spacing: 16) {
-                if isSignUp {
-                    TextField("First Name", text: $firstName)
-                        .textFieldStyle(.roundedBorder)
-                        .textContentType(.givenName)
-                        .autocorrectionDisabled()
-
-                    TextField("Last Name", text: $lastName)
-                        .textFieldStyle(.roundedBorder)
-                        .textContentType(.familyName)
-                        .autocorrectionDisabled()
-                }
-
-                TextField("Email", text: $email)
-                    .textFieldStyle(.roundedBorder)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.emailAddress)
-                    .textContentType(.emailAddress)
-
-                SecureField("Password", text: $password)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(isSignUp ? .newPassword : .password)
-
-                if isSignUp {
-                    SecureField("Confirm Password", text: $confirmPassword)
-                        .textFieldStyle(.roundedBorder)
-                        .textContentType(.newPassword)
-                }
-            }
-            .padding(.horizontal)
-
-            if let error = authController.errorMessage {
-                Text(error)
-                    .foregroundStyle(.red)
-                    .font(.caption)
-                    .padding(.horizontal)
-            }
-
-            Button(action: submit) {
-                Group {
-                    if isLoading {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Text(isSignUp ? "Create Account" : "Log In")
+                    if let error = authController.errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 4)
                     }
-                }
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(isFormValid ? Color.blue : Color.gray)
-                .foregroundColor(.white)
-                .cornerRadius(10)
-            }
-            .disabled(!isFormValid || isLoading)
-            .padding(.horizontal)
 
-            Spacer()
+                    submitButton
+                }
+                .padding(.horizontal, 28)
+                .padding(.vertical, 34)
+                .frame(maxWidth: 620)
+                .background(
+                    RoundedRectangle(cornerRadius: 34, style: .continuous)
+                        .fill(Color.white.opacity(0.96))
+                        .shadow(color: .black.opacity(0.12), radius: 20, x: 0, y: 10)
+                )
+                .padding(.horizontal, 24)
+
+                Spacer()
+            }
         }
         .alert("Check Your Email", isPresented: $showConfirmationAlert) {
             Button("OK") {
@@ -96,15 +63,176 @@ struct LoginView: View {
         }
     }
 
+    private var headerSection: some View {
+        VStack(spacing: 8) {
+            Text("Neighborly")
+                .font(.system(size: 30, weight: .bold))
+                .foregroundStyle(brandGreen)
+
+            Text("Smart grocery trips, made easy.")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(.gray)
+                .multilineTextAlignment(.center)
+        }
+    }
+
+    private var modeToggle: some View {
+        HStack(spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isSignUp = false
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    if !isSignUp {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 15, weight: .bold))
+                    }
+
+                    Text("Log In")
+                        .font(.system(size: 17, weight: .semibold))
+                }
+                .foregroundStyle(!isSignUp ? .white : brandGreen)
+                .frame(maxWidth: .infinity)
+                .frame(height: 58)
+                .background(!isSignUp ? brandGreen : lightGreen)
+            }
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isSignUp = true
+                }
+            } label: {
+                Text("Sign Up")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(isSignUp ? .white : brandGreen)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 58)
+                    .background(isSignUp ? brandGreen : lightGreen)
+            }
+        }
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .stroke(borderColor, lineWidth: 1.8)
+        )
+    }
+
+    private var formSection: some View {
+        VStack(spacing: 18) {
+            if isSignUp {
+                HStack(spacing: 14) {
+                    themedTextField(
+                        title: "First Name",
+                        text: $firstName,
+                        contentType: .givenName
+                    )
+
+                    themedTextField(
+                        title: "Last Name",
+                        text: $lastName,
+                        contentType: .familyName
+                    )
+                }
+            }
+
+            themedTextField(
+                title: "Email",
+                text: $email,
+                keyboardType: .emailAddress,
+                contentType: .emailAddress,
+                autocapitalization: .never
+            )
+
+            themedSecureField(
+                title: "Password",
+                text: $password,
+                contentType: isSignUp ? .newPassword : .password
+            )
+
+            if isSignUp {
+                themedSecureField(
+                    title: "Confirm Password",
+                    text: $confirmPassword,
+                    contentType: .newPassword
+                )
+            }
+        }
+    }
+
+    private var submitButton: some View {
+        Button(action: submit) {
+            Group {
+                if isLoading {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Text(isSignUp ? "Create Account" : "Log In")
+                        .font(.system(size: 20, weight: .semibold))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 62)
+            .background(isFormValid ? brandGreen : Color.gray.opacity(0.5))
+            .foregroundStyle(.white)
+            .clipShape(Capsule())
+        }
+        .disabled(!isFormValid || isLoading)
+        .padding(.top, 4)
+    }
+
+    private func themedTextField(
+        title: String,
+        text: Binding<String>,
+        keyboardType: UIKeyboardType = .default,
+        contentType: UITextContentType? = nil,
+        autocapitalization: TextInputAutocapitalization? = .sentences
+    ) -> some View {
+        TextField(title, text: text)
+            .font(.system(size: 18))
+            .padding(.horizontal, 20)
+            .frame(height: 74)
+            .background(Color.white)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(borderColor, lineWidth: 1.8)
+            )
+            .keyboardType(keyboardType)
+            .textContentType(contentType)
+            .textInputAutocapitalization(autocapitalization)
+            .autocorrectionDisabled()
+    }
+
+    private func themedSecureField(
+        title: String,
+        text: Binding<String>,
+        contentType: UITextContentType? = nil
+    ) -> some View {
+        SecureField(title, text: text)
+            .font(.system(size: 18))
+            .padding(.horizontal, 20)
+            .frame(height: 74)
+            .background(Color.white)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(borderColor, lineWidth: 1.8)
+            )
+            .textContentType(contentType)
+    }
+
     private var isFormValid: Bool {
         let hasEmail = !email.isEmpty
         let hasPassword = !password.isEmpty
+
         if isSignUp {
-            return hasEmail && hasPassword
-                && !firstName.isEmpty
-                && password == confirmPassword
-                && password.count >= 6
+            return hasEmail &&
+                hasPassword &&
+                !firstName.isEmpty &&
+                !lastName.isEmpty &&
+                password == confirmPassword &&
+                password.count >= 6
         }
+
         return hasEmail && hasPassword
     }
 
@@ -112,6 +240,7 @@ struct LoginView: View {
         isLoading = true
         Task {
             defer { isLoading = false }
+
             if isSignUp {
                 let signedIn = await authController.signUp(
                     email: email,
@@ -119,6 +248,7 @@ struct LoginView: View {
                     firstName: firstName,
                     lastName: lastName
                 )
+
                 if !signedIn && authController.errorMessage == nil {
                     showConfirmationAlert = true
                 }
