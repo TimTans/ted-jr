@@ -17,22 +17,25 @@ export async function login(formData: FormData) {
   }
 
   const { data: profile } = await supabase
-  .from('users')
-  .select('role')
-  .eq('id', data.user.id)
-  .single()
+    .from('users')
+    .select('role')
+    .eq('id', data.user.id)
+    .single()
 
-  if (profile?.role === 'admin') {
+  const metadataRole = data.user.user_metadata?.role as string | undefined
+  const role = profile?.role ?? metadataRole
+
+  if (role === 'admin') {
     revalidatePath('/admin', 'layout')
     redirect('/admin')
   }
 
-  if (profile?.role === 'vendor') {
+  if (role === 'vendor') {
     revalidatePath('/vendordashboard', 'layout')
     redirect('/vendordashboard')
   }
 
-  if (profile?.role === 'pending_vendor') {
+  if (role === 'pending_vendor') {
     redirect('/auth/pending-approval')
   }
 

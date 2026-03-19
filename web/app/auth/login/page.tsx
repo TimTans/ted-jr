@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { login } from './action'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 
 export default async function LoginPage({
   searchParams,
@@ -9,20 +9,24 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string }>
 }) {
   const supabase = await createClient()
+  const adminClient = createAdminClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
   if (user) {
-    const { data: profile } = await supabase
+    const { data: profile } = await adminClient
       .from('users')
       .select('role')
       .eq('id', user.id)
       .single()
 
-    if (profile?.role === 'admin') redirect('/admin')
-    if (profile?.role === 'vendor') redirect('/vendordashboard')
-    if (profile?.role === 'pending_vendor') redirect('/auth/pending-approval')
+    const metadataRole = user.user_metadata?.role as string | undefined
+    const role = profile?.role ?? metadataRole
+
+    if (role === 'admin') redirect('/admin')
+    if (role === 'vendor') redirect('/vendordashboard')
+    if (role === 'pending_vendor') redirect('/auth/pending-approval')
     redirect('/dashboard')
   }
 

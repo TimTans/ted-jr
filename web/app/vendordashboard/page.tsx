@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
+import ProfileDropdown from "@/components/ProfileDropdown";
 
 interface StoreProduct {
   id: string;
@@ -235,16 +236,19 @@ const VendorDashboard: React.FC = () => {
           ))}
         </nav>
 
-        {/* Store badge */}
-        <div className="flex items-center gap-2.5 cursor-pointer bg-stone-200 rounded-xl px-3.5 py-1.5">
-          <div
-            className="w-8 h-8 rounded-[10px] flex items-center justify-center text-white font-bold text-sm"
-            style={{ background: "linear-gradient(135deg,#D94F30,#F4A261)" }}
-          >TJ</div>
-          <div>
-            <div className="text-sm font-semibold leading-tight">{STORE.name}</div>
-            <div className="text-[11px] text-stone-400">130 Court St</div>
+        {/* Store badge + profile menu */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 cursor-pointer bg-stone-200 rounded-xl px-3.5 py-1.5">
+            <div
+              className="w-8 h-8 rounded-[10px] flex items-center justify-center text-white font-bold text-sm"
+              style={{ background: "linear-gradient(135deg,#D94F30,#F4A261)" }}
+            >TJ</div>
+            <div>
+              <div className="text-sm font-semibold leading-tight">{STORE.name}</div>
+              <div className="text-[11px] text-stone-400">130 Court St</div>
+            </div>
           </div>
+          <ProfileDropdown showSettings={false} />
         </div>
       </header>
 
