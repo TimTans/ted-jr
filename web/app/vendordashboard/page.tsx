@@ -94,10 +94,15 @@ const VendorDashboard: React.FC = () => {
   const [reviews, setReviews] = useState<StoreReview[]>([]);
   const [priceHistory, setPriceHistory] = useState<Record<string, PriceHistoryEntry[]>>({});
   const [vendorName, setVendorName] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState<string>("");
   const [editSale, setEditSale] = useState<string>("");
   const [historyOpen, setHistoryOpen] = useState<string | null>(null);
+  const [salePage, setSalePage] = useState<number>(1);
+  const salePerPage = 6;
   const priceInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
@@ -134,6 +139,23 @@ const VendorDashboard: React.FC = () => {
   storeProducts.forEach((p) => {
     categoryCounts[p.category] = (categoryCounts[p.category] || 0) + 1;
   });
+
+  // Search + pagination (client-side, data already loaded)
+  const filteredProducts = storeProducts.filter((p) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      p.name.toLowerCase().includes(q) ||
+      (p.brand && p.brand.toLowerCase().includes(q)) ||
+      p.category.toLowerCase().includes(q)
+    );
+  });
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
+  const clampedPage = Math.min(currentPage, totalPages);
+  const paginatedProducts = filteredProducts.slice((clampedPage - 1) * pageSize, clampedPage * pageSize);
+
+  const handleSearch = (val: string) => { setSearchQuery(val); setCurrentPage(1); };
+  const handlePageSize = (val: number) => { setPageSize(val); setCurrentPage(1); };
 
   const startEdit = (p: StoreProduct) => {
     setEditingId(p.id);
@@ -423,6 +445,33 @@ const VendorDashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* Search + page size */}
+          <div className="flex items-center gap-3 mb-3">
+            <div className="relative flex-1">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              </svg>
+              <input
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                placeholder="Search by name, brand, or category..."
+                className="w-full pl-9 pr-3 py-2 border border-stone-200 rounded-xl text-sm bg-stone-50 outline-none focus:border-green-700 focus:ring-2 focus:ring-green-700/10 transition-all"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-stone-400 whitespace-nowrap">Show</span>
+              <select
+                value={pageSize}
+                onChange={(e) => handlePageSize(Number(e.target.value))}
+                className="border border-stone-200 rounded-lg px-2 py-2 text-sm bg-stone-50 outline-none focus:border-green-700 cursor-pointer"
+              >
+                {[10, 25, 50, 100].map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           {/* Table header */}
           <div className="grid grid-cols-[2.2fr_0.8fr_0.9fr_0.7fr_0.7fr_0.7fr_80px] items-center py-3 border-b-2 border-stone-100 text-[11px] font-semibold text-stone-300 uppercase tracking-wider">
             <span>Product</span>
@@ -435,7 +484,7 @@ const VendorDashboard: React.FC = () => {
           </div>
 
           {/* Rows */}
-          {storeProducts.map((p) => {
+          {paginatedProducts.map((p) => {
             const isEditing = editingId === p.id;
             const hasHistory = !!priceHistory[p.id];
             const isHistoryOpen = historyOpen === p.id;
@@ -583,52 +632,142 @@ const VendorDashboard: React.FC = () => {
           {/* Footer */}
           <div className="flex justify-between items-center mt-4 pt-4 border-t-2 border-stone-100">
             <span className="text-sm text-stone-400">
-              {storeProducts.length} products · {onSaleCount} on sale · {outOfStockCount} out of stock
+              {searchQuery.trim()
+                ? `${filteredProducts.length} of ${storeProducts.length} products`
+                : `${storeProducts.length} products`}
+              {" · "}{onSaleCount} on sale · {outOfStockCount} out of stock
             </span>
+            {totalPages > 1 && (() => {
+              const maxVisible = 5;
+              let startPg = Math.max(1, clampedPage - Math.floor(maxVisible / 2));
+              let endPg = startPg + maxVisible - 1;
+              if (endPg > totalPages) { endPg = totalPages; startPg = Math.max(1, endPg - maxVisible + 1); }
+              const pages: (number | "...")[] = [];
+              if (startPg > 1) { pages.push(1); if (startPg > 2) pages.push("..."); }
+              for (let i = startPg; i <= endPg; i++) pages.push(i);
+              if (endPg < totalPages) { if (endPg < totalPages - 1) pages.push("..."); pages.push(totalPages); }
+
+              return (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={clampedPage <= 1}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-medium border-none cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-default bg-transparent text-stone-500 hover:bg-stone-100"
+                  >Prev</button>
+                  {pages.map((pg, i) =>
+                    pg === "..." ? (
+                      <span key={`ellipsis-${i}`} className="text-xs text-stone-300 px-1">...</span>
+                    ) : (
+                      <button
+                        key={pg}
+                        onClick={() => setCurrentPage(pg)}
+                        className={`w-8 h-8 rounded-lg text-xs font-semibold border-none cursor-pointer transition-colors
+                          ${pg === clampedPage ? "bg-green-800 text-white" : "bg-transparent text-stone-500 hover:bg-stone-100"}`}
+                      >{pg}</button>
+                    )
+                  )}
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={clampedPage >= totalPages}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-medium border-none cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-default bg-transparent text-stone-500 hover:bg-stone-100"
+                  >Next</button>
+                  <div className="flex items-center gap-1.5 ml-3 pl-3 border-l border-stone-200">
+                    <span className="text-xs text-stone-400">Go to</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={totalPages}
+                      placeholder={String(clampedPage)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const val = parseInt((e.target as HTMLInputElement).value);
+                          if (val >= 1 && val <= totalPages) { setCurrentPage(val); (e.target as HTMLInputElement).value = ""; }
+                        }
+                      }}
+                      className="w-12 border border-stone-200 rounded-lg px-2 py-1.5 text-xs text-center bg-stone-50 outline-none focus:border-green-700 focus:ring-2 focus:ring-green-700/10 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    />
+                    <span className="text-xs text-stone-400">of {totalPages}</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
         {/* ── On Sale — col-span-2 ── */}
-        <div className="bg-white rounded-2xl p-7 border border-black/[0.05] hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 col-span-2">
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-stone-400 mb-5">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
-              <line x1="7" y1="7" x2="7.01" y2="7"/>
-            </svg>
-            Products on Sale
-          </div>
-          {onSaleCount > 0 ? (
-            <div className="grid grid-cols-2 gap-3">
-              {storeProducts.filter((p) => p.sale_price !== null).map((p) => {
-                const pctOff = Math.round(((p.price - p.sale_price!) / p.price) * 100);
-                return (
-                  <div key={p.id} className="bg-stone-50 rounded-2xl p-[18px] border border-stone-100">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <div className="font-semibold text-[15px]">{p.name}</div>
-                        <div className="text-xs text-stone-400">{p.brand || "Generic"} · per {p.unit_type}</div>
-                      </div>
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-green-100 text-green-800">
-                        SALE
-                      </span>
-                    </div>
-                    <div className="flex items-baseline gap-2.5">
-                      <span className="fraunces text-2xl font-semibold text-green-800">${p.sale_price!.toFixed(2)}</span>
-                      <span className="text-sm text-stone-300 line-through">${p.price.toFixed(2)}</span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-800">
-                        −{pctOff}%
-                      </span>
-                    </div>
+        {(() => {
+          const saleProducts = storeProducts.filter((p) => p.sale_price !== null);
+          const saleTotalPages = Math.max(1, Math.ceil(saleProducts.length / salePerPage));
+          const saleClampedPage = Math.min(salePage, saleTotalPages);
+          const salePaginated = saleProducts.slice((saleClampedPage - 1) * salePerPage, saleClampedPage * salePerPage);
+
+          return (
+            <div className="bg-white rounded-2xl p-7 border border-black/[0.05] hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 col-span-2">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-stone-400">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+                    <line x1="7" y1="7" x2="7.01" y2="7"/>
+                  </svg>
+                  Products on Sale
+                  {saleProducts.length > 0 && (
+                    <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-[11px] font-semibold ml-1">{saleProducts.length}</span>
+                  )}
+                </div>
+                {saleTotalPages > 1 && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setSalePage((p) => Math.max(1, p - 1))}
+                      disabled={saleClampedPage <= 1}
+                      className="p-1.5 rounded-lg text-stone-400 hover:bg-stone-100 border-none bg-transparent cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-default"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+                    </button>
+                    <span className="text-xs text-stone-400 px-1">{saleClampedPage} / {saleTotalPages}</span>
+                    <button
+                      onClick={() => setSalePage((p) => Math.min(saleTotalPages, p + 1))}
+                      disabled={saleClampedPage >= saleTotalPages}
+                      className="p-1.5 rounded-lg text-stone-400 hover:bg-stone-100 border-none bg-transparent cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-default"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
                   </div>
-                );
-              })}
+                )}
+              </div>
+              {saleProducts.length > 0 ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {salePaginated.map((p) => {
+                    const pctOff = Math.round(((p.price - p.sale_price!) / p.price) * 100);
+                    return (
+                      <div key={p.id} className="bg-stone-50 rounded-2xl p-[18px] border border-stone-100">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <div className="font-semibold text-[15px]">{p.name}</div>
+                            <div className="text-xs text-stone-400">{p.brand || "Generic"} · per {p.unit_type}</div>
+                          </div>
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-green-100 text-green-800">
+                            SALE
+                          </span>
+                        </div>
+                        <div className="flex items-baseline gap-2.5">
+                          <span className="fraunces text-2xl font-semibold text-green-800">${p.sale_price!.toFixed(2)}</span>
+                          <span className="text-sm text-stone-300 line-through">${p.price.toFixed(2)}</span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-green-100 text-green-800">
+                            −{pctOff}%
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-stone-400 text-sm">
+                  No active sales. Set a sale price on any product to create a deal.
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="text-center py-8 text-stone-400 text-sm">
-              No active sales. Set a sale price on any product to create a deal.
-            </div>
-          )}
-        </div>
+          );
+        })()}
 
         {/* ── Recent Reviews ── */}
         <div className="bg-white rounded-2xl p-7 border border-black/[0.05] hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300">
