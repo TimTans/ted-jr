@@ -177,7 +177,7 @@ const UserDashboard = () => {
           </div>
 
           {/* Profile */}
-          <ProfileDropdown />
+          <ProfileDropdown showSettings={true} />
         </div>
       </header>
 

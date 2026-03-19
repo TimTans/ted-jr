@@ -8,6 +8,7 @@ import {
   approveVendor,
   rejectVendor,
 } from "./actions";
+import ProfileDropdown from "@/components/ProfileDropdown";
 
 interface PendingVendor {
   id: string;
@@ -227,9 +228,7 @@ export default function AdminDashboard() {
           ))}
         </nav>
 
-        <div className="w-9 h-9 rounded-full bg-green-800 flex items-center justify-center text-white font-semibold text-sm cursor-pointer">
-          A
-        </div>
+        <ProfileDropdown showSettings={false} />
       </header>
 
       {/* ── Banner ── */}
