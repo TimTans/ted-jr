@@ -1,11 +1,31 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { login } from './action'
+import { createClient } from '@/lib/supabase/server'
 
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>
 }) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.role === 'admin') redirect('/admin')
+    if (profile?.role === 'vendor') redirect('/vendordashboard')
+    if (profile?.role === 'pending_vendor') redirect('/auth/pending-approval')
+    redirect('/dashboard')
+  }
+
   const { error } = await searchParams
 
   return (
