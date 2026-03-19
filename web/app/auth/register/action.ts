@@ -36,17 +36,10 @@ export async function signup(formData: FormData) {
       redirect('/auth/register?error=' + encodeURIComponent(error.message))
     }
 
-    if (is_vendor && data.user) {
-      await supabase
-        .from('users')
-        .update({ role: 'pending_vendor' })
-        .eq('id', data.user.id)
-    }
-
     if (is_vendor) {
       redirect('/auth/pending-approval')
     }
   
     revalidatePath('/', 'layout')
-    redirect('/')
+    redirect('/auth/check-email')
   }
