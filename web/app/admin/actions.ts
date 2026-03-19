@@ -1,27 +1,29 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 
 async function requireAdmin() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not authenticated' as const, supabase: null }
+  if (!user) return { error: 'Not authenticated' as const }
 
-  const { data: profile } = await supabase
+  const adminClient = createAdminClient()
+
+  const { data: profile } = await adminClient
     .from('users')
     .select('role')
     .eq('id', user.id)
     .single()
 
-  if (profile?.role !== 'admin') return { error: 'Not authorized' as const, supabase: null }
-  return { error: null, supabase }
+  if (profile?.role !== 'admin') return { error: 'Not authorized' as const }
+  return { error: null, adminClient }
 }
 
 export async function getPendingVendors() {
-  const { supabase, error } = await requireAdmin()
-  if (error || !supabase) return { error: error || 'Unknown error', data: [] }
+  const result = await requireAdmin()
+  if (result.error || !result.adminClient) return { error: result.error || 'Unknown error', data: [] }
 
-  const { data, error: queryError } = await supabase
+  const { data, error: queryError } = await result.adminClient
     .from('users')
     .select('id, first_name, last_name, email, zip_code, created_at')
     .eq('role', 'pending_vendor')
@@ -32,10 +34,10 @@ export async function getPendingVendors() {
 }
 
 export async function getApprovedVendors() {
-  const { supabase, error } = await requireAdmin()
-  if (error || !supabase) return { error: error || 'Unknown error', data: [] }
+  const result = await requireAdmin()
+  if (result.error || !result.adminClient) return { error: result.error || 'Unknown error', data: [] }
 
-  const { data, error: queryError } = await supabase
+  const { data, error: queryError } = await result.adminClient
     .from('users')
     .select(`
       id, first_name, last_name, email, zip_code, created_at, last_login_at,
@@ -55,10 +57,10 @@ export async function getApprovedVendors() {
 }
 
 export async function getStores() {
-  const { supabase, error } = await requireAdmin()
-  if (error || !supabase) return { error: error || 'Unknown error', data: [] }
+  const result = await requireAdmin()
+  if (result.error || !result.adminClient) return { error: result.error || 'Unknown error', data: [] }
 
-  const { data, error: queryError } = await supabase
+  const { data, error: queryError } = await result.adminClient
     .from('stores')
     .select('id, name, address')
     .order('name')
@@ -68,13 +70,13 @@ export async function getStores() {
 }
 
 export async function getAdminStats() {
-  const { supabase, error } = await requireAdmin()
-  if (error || !supabase) return { pendingCount: 0, approvedCount: 0, totalUsers: 0 }
+  const result = await requireAdmin()
+  if (result.error || !result.adminClient) return { pendingCount: 0, approvedCount: 0, totalUsers: 0 }
 
   const [pending, approved, total] = await Promise.all([
-    supabase.from('users').select('id', { count: 'exact', head: true }).eq('role', 'pending_vendor'),
-    supabase.from('users').select('id', { count: 'exact', head: true }).eq('role', 'vendor'),
-    supabase.from('users').select('id', { count: 'exact', head: true }),
+    result.adminClient.from('users').select('id', { count: 'exact', head: true }).eq('role', 'pending_vendor'),
+    result.adminClient.from('users').select('id', { count: 'exact', head: true }).eq('role', 'vendor'),
+    result.adminClient.from('users').select('id', { count: 'exact', head: true }),
   ])
 
   return {
@@ -85,10 +87,10 @@ export async function getAdminStats() {
 }
 
 export async function approveVendor(userId: string, storeId?: string) {
-  const { supabase, error } = await requireAdmin()
-  if (error || !supabase) return { error: error || 'Unknown error' }
+  const result = await requireAdmin()
+  if (result.error || !result.adminClient) return { error: result.error || 'Unknown error' }
 
-  const { error: roleError } = await supabase
+  const { error: roleError } = await result.adminClient
     .from('users')
     .update({ role: 'vendor' })
     .eq('id', userId)
@@ -96,7 +98,7 @@ export async function approveVendor(userId: string, storeId?: string) {
   if (roleError) return { error: roleError.message }
 
   if (storeId) {
-    const { error: vendorError } = await supabase
+    const { error: vendorError } = await result.adminClient
       .from('vendors')
       .insert({ user_id: userId, store_id: storeId })
 
@@ -107,10 +109,10 @@ export async function approveVendor(userId: string, storeId?: string) {
 }
 
 export async function rejectVendor(userId: string) {
-  const { supabase, error } = await requireAdmin()
-  if (error || !supabase) return { error: error || 'Unknown error' }
+  const result = await requireAdmin()
+  if (result.error || !result.adminClient) return { error: result.error || 'Unknown error' }
 
-  const { error: updateError } = await supabase
+  const { error: updateError } = await result.adminClient
     .from('users')
     .update({ role: 'rejected' })
     .eq('id', userId)
