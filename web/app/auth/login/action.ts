@@ -32,6 +32,10 @@ export async function login(formData: FormData) {
     redirect('/vendordashboard')
   }
 
+  if (profile?.role === 'pending_vendor') {
+    redirect('/auth/pending-approval')
+  }
+
   // Default: shopper
   revalidatePath('/dashboard', 'layout')
   redirect('/dashboard')
