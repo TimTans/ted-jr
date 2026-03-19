@@ -1,6 +1,11 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import ProfileDropdown from "@/components/ProfileDropdown";
+import {
+  getVendorDashboardData,
+  updateProductPrice,
+  toggleProductStock,
+} from "./actions";
 
 interface StoreProduct {
   id: string;
@@ -36,52 +41,6 @@ interface Store {
   zip_code: string | null;
 }
 
-/* ═══ DATA ═══ */
-
-const INITIAL_PRODUCTS: StoreProduct[] = [
-  { id: "sp1", name: "Organic Bananas", brand: "Trader Joe's", category: "Produce", unit_type: "bunch", price: 1.29, sale_price: null, in_stock: true, data_source: "vendor", updated_at: "2026-02-24T10:30:00" },
-  { id: "sp2", name: "Whole Milk 1 Gal", brand: "Trader Joe's", category: "Dairy", unit_type: "gal", price: 4.69, sale_price: null, in_stock: true, data_source: "vendor", updated_at: "2026-02-24T11:00:00" },
-  { id: "sp3", name: "Chicken Breast", brand: null, category: "Meat", unit_type: "lb", price: 8.49, sale_price: 6.99, in_stock: true, data_source: "vendor", updated_at: "2026-02-24T08:15:00" },
-  { id: "sp4", name: "Sourdough Bread", brand: "Trader Joe's", category: "Bakery", unit_type: "loaf", price: 4.49, sale_price: null, in_stock: true, data_source: "vendor", updated_at: "2026-02-24T11:45:00" },
-  { id: "sp5", name: "Baby Spinach 5oz", brand: "Trader Joe's", category: "Produce", unit_type: "bag", price: 3.49, sale_price: 2.99, in_stock: true, data_source: "api", updated_at: "2026-02-24T09:20:00" },
-  { id: "sp6", name: "Greek Yogurt 32oz", brand: "Fage", category: "Dairy", unit_type: "tub", price: 5.09, sale_price: null, in_stock: false, data_source: "vendor", updated_at: "2026-02-24T06:00:00" },
-  { id: "sp7", name: "Olive Oil 500ml", brand: "Trader Joe's", category: "Pantry", unit_type: "bottle", price: 7.99, sale_price: 5.49, in_stock: true, data_source: "vendor", updated_at: "2026-02-24T11:00:00" },
-  { id: "sp8", name: "Avocados (4 pk)", brand: null, category: "Produce", unit_type: "pack", price: 4.49, sale_price: 2.99, in_stock: true, data_source: "community", updated_at: "2026-02-23T17:30:00" },
-];
-
-const PRICE_HISTORY: Record<string, PriceHistoryEntry[]> = {
-  sp3: [
-    { price: 8.49, sale_price: null, recorded_at: "2026-02-01" },
-    { price: 8.49, sale_price: 7.49, recorded_at: "2026-02-10" },
-    { price: 8.49, sale_price: 6.99, recorded_at: "2026-02-20" },
-  ],
-  sp7: [
-    { price: 8.99, sale_price: null, recorded_at: "2026-01-15" },
-    { price: 7.99, sale_price: null, recorded_at: "2026-02-01" },
-    { price: 7.99, sale_price: 5.49, recorded_at: "2026-02-22" },
-  ],
-  sp1: [
-    { price: 1.49, sale_price: null, recorded_at: "2026-02-01" },
-    { price: 1.29, sale_price: null, recorded_at: "2026-02-15" },
-  ],
-};
-
-const REVIEWS: StoreReview[] = [
-  { rating: 5, comment: "Great prices on produce, always fresh.", user_name: "Maria S.", created_at: "2026-02-22" },
-  { rating: 4, comment: "Love the store brand items. Wish they had more organic options.", user_name: "James L.", created_at: "2026-02-20" },
-  { rating: 5, comment: "Best prices in the neighborhood for everyday staples.", user_name: "Priya K.", created_at: "2026-02-18" },
-  { rating: 3, comment: "Sometimes out of stock on popular items.", user_name: "David R.", created_at: "2026-02-15" },
-  { rating: 5, comment: null, user_name: "Aisha M.", created_at: "2026-02-12" },
-];
-
-const STORE: Store = {
-  name: "Trader Joe's",
-  address: "130 Court St, Brooklyn, NY 11201",
-  phone: "(718) 246-8460",
-  website_url: "traderjoes.com",
-  zip_code: "11201",
-};
-
 /* ═══ HELPERS ═══ */
 
 const CAT_COLORS: Record<string, string> = {
@@ -111,7 +70,7 @@ const srcPillClass = (s: string): string => {
 
 const fmtTime = (iso: string): string => {
   const d = new Date(iso);
-  const now = new Date("2026-02-24T12:00:00");
+  const now = new Date();
   const m = Math.floor((now.getTime() - d.getTime()) / 60000);
   if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60);
@@ -127,13 +86,37 @@ const starsStr = (n: number): string => "★".repeat(n) + "☆".repeat(5 - n);
 /* ═══ COMPONENT ═══ */
 
 const VendorDashboard: React.FC = () => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("products");
-  const [storeProducts, setStoreProducts] = useState<StoreProduct[]>(INITIAL_PRODUCTS);
+  const [storeProducts, setStoreProducts] = useState<StoreProduct[]>([]);
+  const [store, setStore] = useState<Store>({ name: "", address: "", phone: null, website_url: null, zip_code: null });
+  const [reviews, setReviews] = useState<StoreReview[]>([]);
+  const [priceHistory, setPriceHistory] = useState<Record<string, PriceHistoryEntry[]>>({});
+  const [vendorName, setVendorName] = useState<string>("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState<string>("");
   const [editSale, setEditSale] = useState<string>("");
   const [historyOpen, setHistoryOpen] = useState<string | null>(null);
   const priceInputRef = useRef<HTMLInputElement>(null);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    const result = await getVendorDashboardData();
+    if (result.error) {
+      setError(result.error);
+      setLoading(false);
+      return;
+    }
+    if (result.store) setStore(result.store);
+    if (result.products) setStoreProducts(result.products);
+    if (result.reviews) setReviews(result.reviews);
+    if (result.priceHistory) setPriceHistory(result.priceHistory);
+    if (result.vendorFirstName) setVendorName(result.vendorFirstName);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   useEffect(() => {
     if (editingId && priceInputRef.current) priceInputRef.current.focus();
@@ -142,8 +125,10 @@ const VendorDashboard: React.FC = () => {
   const inStockCount = storeProducts.filter((p) => p.in_stock).length;
   const outOfStockCount = storeProducts.filter((p) => !p.in_stock).length;
   const onSaleCount = storeProducts.filter((p) => p.sale_price !== null).length;
-  const stockPct = Math.round((inStockCount / storeProducts.length) * 100);
-  const avgRating = (REVIEWS.reduce((s, r) => s + r.rating, 0) / REVIEWS.length).toFixed(1);
+  const stockPct = storeProducts.length ? Math.round((inStockCount / storeProducts.length) * 100) : 0;
+  const avgRating = reviews.length
+    ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
+    : "0.0";
 
   const categoryCounts: Record<string, number> = {};
   storeProducts.forEach((p) => {
@@ -158,11 +143,13 @@ const VendorDashboard: React.FC = () => {
 
   const cancelEdit = () => setEditingId(null);
 
-  const saveEdit = (id: string) => {
+  const saveEdit = async (id: string) => {
     const np = parseFloat(editPrice);
     if (isNaN(np)) return;
     const ns = editSale.trim() ? parseFloat(editSale) : null;
     if (ns !== null && isNaN(ns)) return;
+
+    // Optimistic update
     setStoreProducts((prev) =>
       prev.map((p) =>
         p.id === id
@@ -171,9 +158,17 @@ const VendorDashboard: React.FC = () => {
       )
     );
     setEditingId(null);
+
+    // Persist to database
+    const result = await updateProductPrice(id, np, ns);
+    if (result.error) {
+      // Reload data on error to revert
+      loadData();
+    }
   };
 
-  const toggleStock = (id: string) => {
+  const handleToggleStock = async (id: string) => {
+    // Optimistic update
     setStoreProducts((prev) =>
       prev.map((p) =>
         p.id === id
@@ -181,12 +176,58 @@ const VendorDashboard: React.FC = () => {
           : p
       )
     );
+
+    // Persist to database
+    const result = await toggleProductStock(id);
+    if (result.error) {
+      loadData();
+    }
   };
 
   const handleEditKeydown = (e: React.KeyboardEvent, id: string) => {
     if (e.key === "Enter") saveEdit(id);
     if (e.key === "Escape") cancelEdit();
   };
+
+  /* ═══ LOADING & ERROR STATES ═══ */
+
+  if (loading) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center text-stone-900"
+        style={{ background: "#F7F5F0", fontFamily: "'DM Sans', sans-serif" }}
+      >
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-stone-200 border-t-green-800 rounded-full animate-spin mx-auto mb-4" />
+          <div className="text-stone-500 text-sm">Loading your dashboard...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center text-stone-900"
+        style={{ background: "#F7F5F0", fontFamily: "'DM Sans', sans-serif" }}
+      >
+        <div className="text-center max-w-md">
+          <div className="text-red-600 text-lg font-semibold mb-2">Unable to load dashboard</div>
+          <div className="text-stone-500 text-sm">{error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ═══ STORE INITIALS ═══ */
+  const storeInitials = store.name
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  const shortAddress = store.address.split(",")[0] || store.address;
 
   return (
     <div
@@ -242,10 +283,10 @@ const VendorDashboard: React.FC = () => {
             <div
               className="w-8 h-8 rounded-[10px] flex items-center justify-center text-white font-bold text-sm"
               style={{ background: "linear-gradient(135deg,#D94F30,#F4A261)" }}
-            >TJ</div>
+            >{storeInitials}</div>
             <div>
-              <div className="text-sm font-semibold leading-tight">{STORE.name}</div>
-              <div className="text-[11px] text-stone-400">130 Court St</div>
+              <div className="text-sm font-semibold leading-tight">{store.name}</div>
+              <div className="text-[11px] text-stone-400">{shortAddress}</div>
             </div>
           </div>
           <ProfileDropdown showSettings={false} />
@@ -262,7 +303,7 @@ const VendorDashboard: React.FC = () => {
           <div className="absolute -bottom-20 right-32 w-44 h-44 rounded-full bg-white/[0.03] pointer-events-none"/>
           <div className="relative z-10">
             <div className="fraunces text-[28px] font-semibold text-white tracking-tight mb-1.5">
-              Welcome back, {STORE.name}
+              Welcome back{vendorName ? `, ${vendorName}` : ""}
             </div>
             <div className="text-white/70 text-[15px] max-w-[520px]">
               <span className="text-green-300 font-semibold">{storeProducts.length} products</span> listed
@@ -342,11 +383,11 @@ const VendorDashboard: React.FC = () => {
             <div className="fraunces text-[42px] font-semibold leading-none text-orange-600">{avgRating}</div>
             <div className="text-[22px] text-orange-500 tracking-widest pb-1">{"★".repeat(Math.round(parseFloat(avgRating)))}</div>
           </div>
-          <div className="text-sm text-stone-400 mb-4">{REVIEWS.length} reviews</div>
+          <div className="text-sm text-stone-400 mb-4">{reviews.length} reviews</div>
           <div className="flex flex-col gap-1.5">
             {[5, 4, 3, 2, 1].map((r) => {
-              const count = REVIEWS.filter((rv) => rv.rating === r).length;
-              const pct = REVIEWS.length ? (count / REVIEWS.length) * 100 : 0;
+              const count = reviews.filter((rv) => rv.rating === r).length;
+              const pct = reviews.length ? (count / reviews.length) * 100 : 0;
               return (
                 <div key={r} className="flex items-center gap-2">
                   <span className="text-xs text-stone-400 w-3 text-right">{r}</span>
@@ -396,7 +437,7 @@ const VendorDashboard: React.FC = () => {
           {/* Rows */}
           {storeProducts.map((p) => {
             const isEditing = editingId === p.id;
-            const hasHistory = !!PRICE_HISTORY[p.id];
+            const hasHistory = !!priceHistory[p.id];
             const isHistoryOpen = historyOpen === p.id;
 
             return (
@@ -457,7 +498,7 @@ const VendorDashboard: React.FC = () => {
                   {/* In stock toggle */}
                   <div>
                     <button
-                      onClick={() => toggleStock(p.id)}
+                      onClick={() => handleToggleStock(p.id)}
                       className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border-none cursor-pointer transition-colors
                         ${p.in_stock ? "bg-green-100 text-green-800 hover:bg-green-200" : "bg-red-100 text-red-600 hover:bg-red-200"}`}
                     >
@@ -523,7 +564,7 @@ const VendorDashboard: React.FC = () => {
                       Price History — {p.name}
                     </div>
                     <div className="flex gap-3">
-                      {PRICE_HISTORY[p.id].map((h, i) => (
+                      {priceHistory[p.id].map((h, i) => (
                         <div key={i} className="flex-1 bg-white rounded-xl p-3.5 border border-stone-100">
                           <div className="text-[11px] text-stone-400 mb-1">{fmtDate(h.recorded_at)}</div>
                           <div className="font-semibold text-[15px]">${h.price.toFixed(2)}</div>
@@ -597,23 +638,29 @@ const VendorDashboard: React.FC = () => {
             </svg>
             Recent Reviews
           </div>
-          {REVIEWS.map((r, i) => (
-            <div key={i} className={`py-3.5 ${i < REVIEWS.length - 1 ? "border-b border-stone-100" : ""}`}>
-              <div className="flex justify-between items-center mb-1.5">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-stone-100 flex items-center justify-center text-xs font-semibold text-stone-500">
-                    {r.user_name.charAt(0)}
+          {reviews.length > 0 ? (
+            reviews.map((r, i) => (
+              <div key={i} className={`py-3.5 ${i < reviews.length - 1 ? "border-b border-stone-100" : ""}`}>
+                <div className="flex justify-between items-center mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-stone-100 flex items-center justify-center text-xs font-semibold text-stone-500">
+                      {r.user_name.charAt(0)}
+                    </div>
+                    <span className="font-semibold text-sm">{r.user_name}</span>
                   </div>
-                  <span className="font-semibold text-sm">{r.user_name}</span>
+                  <span className="text-[11px] text-stone-400">{fmtDate(r.created_at)}</span>
                 </div>
-                <span className="text-[11px] text-stone-400">{fmtDate(r.created_at)}</span>
+                <div className="text-orange-500 text-sm tracking-wider ml-9 mb-1">{starsStr(r.rating)}</div>
+                {r.comment && (
+                  <div className="text-sm text-stone-500 leading-relaxed ml-9">{r.comment}</div>
+                )}
               </div>
-              <div className="text-orange-500 text-sm tracking-wider ml-9 mb-1">{starsStr(r.rating)}</div>
-              {r.comment && (
-                <div className="text-sm text-stone-500 leading-relaxed ml-9">{r.comment}</div>
-              )}
+            ))
+          ) : (
+            <div className="text-center py-8 text-stone-400 text-sm">
+              No reviews yet.
             </div>
-          ))}
+          )}
         </div>
 
         {/* ── Store Info — col-span-3 ── */}
@@ -632,11 +679,11 @@ const VendorDashboard: React.FC = () => {
           </div>
           <div className="grid grid-cols-5 gap-4">
             {([
-              { label: "Store Name", value: STORE.name },
-              { label: "Address", value: STORE.address },
-              { label: "Phone", value: STORE.phone },
-              { label: "Website", value: STORE.website_url },
-              { label: "Zip Code", value: STORE.zip_code },
+              { label: "Store Name", value: store.name },
+              { label: "Address", value: store.address },
+              { label: "Phone", value: store.phone },
+              { label: "Website", value: store.website_url },
+              { label: "Zip Code", value: store.zip_code },
             ] as { label: string; value: string | null }[]).map((f, i) => (
               <div key={i} className="bg-stone-50 rounded-xl px-4 py-3.5 border border-stone-100">
                 <div className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider mb-1">{f.label}</div>
