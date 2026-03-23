@@ -1,11 +1,31 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { login } from './action'
+import { createClient } from '@/lib/supabase/server'
 
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>
 }) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.role === 'admin') redirect('/admin')
+    if (profile?.role === 'vendor') redirect('/vendordashboard')
+    if (profile?.role === 'pending_vendor') redirect('/auth/pending-approval')
+    redirect('/dashboard')
+  }
+
   const { error } = await searchParams
 
   return (
@@ -162,14 +182,23 @@ export default async function LoginPage({
             </button>
           </form>
 
+          <div className="mt-4 text-right">
+            <Link
+              href="/auth/forgot-password"
+              className="nb-link text-[0.82rem] underline underline-offset-2"
+            >
+              Forgot your password?
+            </Link>
+          </div>
+
           <div
-            className="mt-6 border-t pt-5 text-center"
+            className="mt-5 border-t pt-5 text-center"
             style={{ borderColor: "#e4ded3" }}
           >
             <p className="text-[0.84rem]" style={{ color: "#9b9283" }}>
               Don&apos;t have an account?{" "}
               <Link
-                href="/register"
+                href="/auth/register"
                 className="nb-link font-medium underline underline-offset-2"
               >
                 Sign up

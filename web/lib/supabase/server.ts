@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -35,4 +36,15 @@ export async function createClient() {
       },
     }
   )
+}
+
+export function createAdminClient() {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error(
+      'Missing Supabase admin env vars. Add SUPABASE_SERVICE_ROLE_KEY to .env.local — get it from https://supabase.com/dashboard/project/_/settings/api'
+    )
+  }
+
+  return createSupabaseClient(supabaseUrl, serviceRoleKey)
 }

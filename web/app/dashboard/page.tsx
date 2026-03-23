@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import ProfileDropdown from "@/components/ProfileDropdown";
 import { getWeeklyBudget, saveWeeklyBudget } from "./actions";
+import StoreMap from "@/components/StoreMap";
 
 const UserDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
@@ -176,7 +177,7 @@ const UserDashboard = () => {
           </div>
 
           {/* Profile */}
-          <ProfileDropdown />
+          <ProfileDropdown showSettings={true} />
         </div>
       </header>
 
@@ -406,40 +407,9 @@ const UserDashboard = () => {
           </div>
         </div>
 
-        {/* ── Optimized Route — row-span-2 ── */}
-        <div className="bg-white rounded-2xl p-7 border border-black/[0.05] hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 row-span-2">
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-stone-400 mb-4">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-            </svg>
-            Optimized Route
-          </div>
-
-          {/* Map placeholder */}
-          <div
-            className="rounded-2xl h-52 relative overflow-hidden mb-5 flex flex-col items-center justify-center"
-            style={{ background: "linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 40%, #A5D6A7 100%)" }}
-          >
-            <div
-              className="map-ping absolute w-3.5 h-3.5 rounded-full"
-              style={{ top: "30%", left: "25%", background: "#2D6A4F", boxShadow: "0 0 0 4px rgba(45,106,79,0.2)" }}
-            />
-            <div
-              className="absolute w-3.5 h-3.5 rounded-full"
-              style={{ top: "55%", left: "55%", background: "#D4700A", boxShadow: "0 0 0 4px rgba(212,112,10,0.2)" }}
-            />
-            <div
-              className="absolute w-3.5 h-3.5 rounded-full"
-              style={{ top: "40%", left: "75%", background: "#C1292E", boxShadow: "0 0 0 4px rgba(193,41,46,0.2)" }}
-            />
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(45,106,79,0.5)" strokeWidth="1.5" className="relative z-10">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-              <circle cx="12" cy="10" r="3"/>
-            </svg>
-            <span className="relative z-10 text-xs mt-1 font-medium" style={{ color: "rgba(45,106,79,0.7)" }}>
-              Google Maps Integration
-            </span>
-          </div>
+        <div className="rounded-2xl h-52 relative overflow-hidden mb-5">
+            <StoreMap />
+        </div>
 
           {/* Route stops */}
           {routeStops.map((stop, i) => (
@@ -624,7 +594,7 @@ const UserDashboard = () => {
         </div>
 
       </div>
-    </div>
+    
   );
 };
 
