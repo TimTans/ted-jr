@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 @main
 struct NeighborlyApp: App {
@@ -10,7 +11,7 @@ struct NeighborlyApp: App {
                 if authController.isLoading {
                     ProgressView("Loading...")
                 } else if authController.isAuthenticated {
-                    HomeView()
+                    MainTabView()
                 } else {
                     LoginView()
                 }
@@ -20,5 +21,6 @@ struct NeighborlyApp: App {
                 await authController.listenForAuthChanges()
             }
         }
+        .modelContainer(for: GroceryListItem.self)
     }
 }
