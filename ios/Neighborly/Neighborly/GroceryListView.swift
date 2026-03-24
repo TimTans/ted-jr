@@ -1,5 +1,38 @@
 import SwiftUI
 import SwiftData
+import Network
+
+// MARK: - Network Monitor
+
+@Observable
+final class NetworkMonitor {
+    private let monitor = NWPathMonitor()
+    private let queue = DispatchQueue(label: "NetworkMonitor")
+    private(set) var isConnected = true
+    private(set) var didReconnect = false
+
+    init() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            let wasConnected = self?.isConnected ?? true
+            let nowConnected = path.status == .satisfied
+            DispatchQueue.main.async {
+                self?.isConnected = nowConnected
+                if !wasConnected && nowConnected {
+                    self?.didReconnect = true
+                }
+            }
+        }
+        monitor.start(queue: queue)
+    }
+
+    func acknowledgeReconnect() {
+        didReconnect = false
+    }
+
+    deinit {
+        monitor.cancel()
+    }
+}
 
 // MARK: - Grocery List View
 
@@ -8,19 +41,12 @@ struct GroceryListView: View {
     @Query(sort: \GroceryListItem.dateAdded, order: .reverse) private var items: [GroceryListItem]
 
     @State private var searchText = ""
-    @State private var isSearchFocused = false
-    @State private var allProducts: [ShopRiteItem] = []
+    @State private var searchResults: [Product] = []
+    @State private var isSearching = false
+    @State private var searchError: String?
     @State private var selectedItem: GroceryListItem?
-
-    private var filteredProducts: [ShopRiteItem] {
-        guard !searchText.isEmpty else { return [] }
-        let query = searchText.lowercased()
-        return Array(
-            allProducts
-                .filter { $0.name.lowercased().contains(query) }
-                .prefix(10)
-        )
-    }
+    @State private var selectedProduct: Product?
+    @State private var networkMonitor = NetworkMonitor()
 
     var body: some View {
         NavigationStack {
@@ -29,15 +55,21 @@ struct GroceryListView: View {
                     .ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    // Search bar
                     searchBar
                         .zIndex(1)
 
-                    if items.isEmpty && filteredProducts.isEmpty {
-                        emptyState
-                    } else if !filteredProducts.isEmpty {
-                        // Search results as main content (not overlay)
+                    if let error = searchError, !searchText.isEmpty {
+                        errorBanner(error)
+                    }
+
+                    if isSearching {
+                        loadingView
+                    } else if !searchResults.isEmpty {
                         searchResultsList
+                    } else if !searchText.isEmpty && searchText.count >= 2 {
+                        noResultsView
+                    } else if items.isEmpty {
+                        emptyState
                     } else {
                         groceryList
                     }
@@ -46,14 +78,20 @@ struct GroceryListView: View {
             .navigationTitle("Grocery List")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(item: $selectedItem) { item in
-                ItemDetailSheet(item: item, allProducts: allProducts)
+                ItemDetailSheet(item: item, product: selectedProduct)
                     .presentationDetents([.medium])
             }
         }
-        .onAppear {
-            if allProducts.isEmpty {
-                allProducts = ShopRiteData.loadProducts()
-            }
+        .task(id: searchText) {
+            await performSearch()
+        }
+        .task {
+            await refreshPrices()
+        }
+        .task(id: networkMonitor.didReconnect) {
+            guard networkMonitor.didReconnect else { return }
+            await refreshPrices()
+            networkMonitor.acknowledgeReconnect()
         }
     }
 
@@ -68,9 +106,16 @@ struct GroceryListView: View {
                 .textFieldStyle(.plain)
                 .autocorrectionDisabled()
 
+            if isSearching {
+                ProgressView()
+                    .scaleEffect(0.8)
+            }
+
             if !searchText.isEmpty {
                 Button {
                     searchText = ""
+                    searchResults = []
+                    searchError = nil
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(NeighborlyTheme.textMuted)
@@ -91,15 +136,32 @@ struct GroceryListView: View {
     private var searchResultsList: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(filteredProducts) { product in
+                ForEach(searchResults) { product in
                     Button {
                         addOrIncrement(product)
                         searchText = ""
+                        searchResults = []
                     } label: {
                         HStack(spacing: 12) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title3)
-                                .foregroundStyle(NeighborlyTheme.green)
+                            if let imageUrl = product.imageUrl, let url = URL(string: imageUrl) {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fit)
+                                    default:
+                                        Image(systemName: "plus.circle.fill")
+                                            .font(.title3)
+                                            .foregroundStyle(NeighborlyTheme.green)
+                                    }
+                                }
+                                .frame(width: 40, height: 40)
+                            } else {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(NeighborlyTheme.green)
+                            }
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(product.name)
@@ -107,6 +169,11 @@ struct GroceryListView: View {
                                     .foregroundStyle(NeighborlyTheme.textPrimary)
                                     .lineLimit(2)
                                     .multilineTextAlignment(.leading)
+                                if let brand = product.brand {
+                                    Text(brand)
+                                        .font(.caption)
+                                        .foregroundStyle(NeighborlyTheme.textSecondary)
+                                }
                                 Text(product.unitSize)
                                     .font(.caption)
                                     .foregroundStyle(NeighborlyTheme.textMuted)
@@ -114,21 +181,24 @@ struct GroceryListView: View {
 
                             Spacer()
 
-                            // Show ShopRite price as hint
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text(product.price, format: .currency(code: "USD"))
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(NeighborlyTheme.green)
-                                Text("ShopRite")
-                                    .font(.caption2)
-                                    .foregroundStyle(NeighborlyTheme.textMuted)
+                            if let price = product.bestPrice {
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text(price, format: .currency(code: "USD"))
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(NeighborlyTheme.green)
+                                    if let store = product.bestPriceStoreName {
+                                        Text(store)
+                                            .font(.caption2)
+                                            .foregroundStyle(NeighborlyTheme.textMuted)
+                                    }
+                                }
                             }
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
                     }
 
-                    if product.id != filteredProducts.last?.id {
+                    if product.id != searchResults.last?.id {
                         Divider()
                             .padding(.leading, 52)
                     }
@@ -139,6 +209,54 @@ struct GroceryListView: View {
             .padding(.horizontal, 16)
             .padding(.top, 4)
         }
+    }
+
+    // MARK: - Loading
+
+    private var loadingView: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            ProgressView()
+            Text("Searching...")
+                .font(.subheadline)
+                .foregroundStyle(NeighborlyTheme.textMuted)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - No Results
+
+    private var noResultsView: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 36))
+                .foregroundStyle(NeighborlyTheme.textMuted)
+            Text("No products found")
+                .font(.headline)
+                .foregroundStyle(NeighborlyTheme.textPrimary)
+            Text("Try a different search term")
+                .font(.subheadline)
+                .foregroundStyle(NeighborlyTheme.textSecondary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Error Banner
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "wifi.slash")
+                .font(.caption)
+            Text(message)
+                .font(.caption)
+        }
+        .foregroundStyle(.red.opacity(0.8))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Empty State
@@ -169,18 +287,19 @@ struct GroceryListView: View {
                     .listRowBackground(NeighborlyTheme.cardBackground)
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        selectedItem = item
+                        Task {
+                            await fetchAndShowDetail(for: item)
+                        }
                     }
             }
             .onDelete(perform: deleteItems)
 
-            // Item count footer
             HStack {
                 Text("\(items.count) item\(items.count == 1 ? "" : "s")")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(NeighborlyTheme.textSecondary)
                 Spacer()
-                Text("Tap item for prices")
+                Text("Tap item for details")
                     .font(.caption)
                     .foregroundStyle(NeighborlyTheme.textMuted)
             }
@@ -193,7 +312,40 @@ struct GroceryListView: View {
 
     // MARK: - Actions
 
-    private func addOrIncrement(_ product: ShopRiteItem) {
+    private func performSearch() async {
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+
+        guard query.count >= 2 else {
+            searchResults = []
+            searchError = nil
+            isSearching = false
+            return
+        }
+
+        isSearching = true
+        searchError = nil
+
+        try? await Task.sleep(for: .milliseconds(300))
+
+        guard !Task.isCancelled else { return }
+
+        do {
+            let response = try await APIService.searchProducts(query: query)
+            guard !Task.isCancelled else { return }
+            searchResults = response.data
+            searchError = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            searchResults = []
+            searchError = "Couldn't reach server"
+        }
+
+        isSearching = false
+    }
+
+    private func addOrIncrement(_ product: Product) {
         if let existing = items.first(where: { $0.upc == product.upc }) {
             existing.quantity += 1
         } else {
@@ -207,9 +359,41 @@ struct GroceryListView: View {
             modelContext.delete(items[index])
         }
     }
+
+    private func fetchAndShowDetail(for item: GroceryListItem) async {
+        if let productId = item.productId {
+            selectedProduct = try? await APIService.getProduct(id: productId)
+        } else {
+            selectedProduct = nil
+        }
+        selectedItem = item
+    }
+
+    private func refreshPrices() async {
+        let itemsToRefresh = items.filter { $0.productId != nil }
+        guard !itemsToRefresh.isEmpty else { return }
+
+        await withTaskGroup(of: Void.self) { group in
+            for item in itemsToRefresh {
+                guard let productId = item.productId else { continue }
+                group.addTask {
+                    do {
+                        let product = try await APIService.getProduct(id: productId)
+                        if let newPrice = product.bestPrice, newPrice != item.price {
+                            await MainActor.run {
+                                item.price = newPrice
+                            }
+                        }
+                    } catch {
+                        // Just skip
+                    }
+                }
+            }
+        }
+    }
 }
 
-// MARK: - Grocery Item Row (no price, just name + quantity)
+// MARK: - Grocery Item Row
 
 struct GroceryItemRow: View {
     @Environment(\.modelContext) private var modelContext
@@ -229,7 +413,6 @@ struct GroceryItemRow: View {
 
             Spacer()
 
-            // Quantity stepper
             HStack(spacing: 8) {
                 Button {
                     if item.quantity > 1 {
@@ -261,7 +444,6 @@ struct GroceryItemRow: View {
                 .buttonStyle(.plain)
             }
 
-            // Chevron hint for tap
             Image(systemName: "chevron.right")
                 .font(.caption)
                 .foregroundStyle(NeighborlyTheme.textMuted)
@@ -270,28 +452,14 @@ struct GroceryItemRow: View {
     }
 }
 
-// MARK: - Item Detail Sheet (price comparison)
+// MARK: - Item Detail Sheet
 
 struct ItemDetailSheet: View {
     let item: GroceryListItem
-    let allProducts: [ShopRiteItem]
-
-    private var shopRitePrice: Double? {
-        allProducts.first(where: { $0.upc == item.upc })?.price
-    }
-
-    // Placeholder stores for demo — only ShopRite has real data
-    private var storePrices: [(store: String, price: Double?, isReal: Bool)] {
-        [
-            ("ShopRite", shopRitePrice, true),
-            ("Aldi", shopRitePrice.map { $0 * 0.92 }, false),       // simulated
-            ("Trader Joe's", shopRitePrice.map { $0 * 1.05 }, false) // simulated
-        ]
-    }
+    let product: Product?
 
     var body: some View {
         VStack(spacing: 0) {
-            // Handle
             Capsule()
                 .fill(Color.gray.opacity(0.3))
                 .frame(width: 36, height: 5)
@@ -299,70 +467,124 @@ struct ItemDetailSheet: View {
 
             VStack(alignment: .leading, spacing: 16) {
                 // Item header
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.name)
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(NeighborlyTheme.textPrimary)
-                    Text(item.unitSize)
-                        .font(.subheadline)
-                        .foregroundStyle(NeighborlyTheme.textMuted)
-                    Text("Qty: \(item.quantity)")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(NeighborlyTheme.textSecondary)
+                HStack(alignment: .top, spacing: 14) {
+                    if let imageUrl = product?.imageUrl, let url = URL(string: imageUrl) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                            case .failure:
+                                Image(systemName: "photo")
+                                    .foregroundStyle(NeighborlyTheme.textMuted)
+                            default:
+                                ProgressView()
+                            }
+                        }
+                        .frame(width: 72, height: 72)
+                        .background(NeighborlyTheme.cardBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.name)
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(NeighborlyTheme.textPrimary)
+                        Text(item.unitSize)
+                            .font(.subheadline)
+                            .foregroundStyle(NeighborlyTheme.textMuted)
+                        Text("Qty: \(item.quantity)")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(NeighborlyTheme.textSecondary)
+                    }
                 }
 
                 Divider()
 
-                // Store prices
-                Text("PRICES BY STORE")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(NeighborlyTheme.textMuted)
-                    .tracking(0.5)
+                if let product = product, !product.storeProducts.isEmpty {
+                    // Real multi-store prices
+                    Text("PRICES BY STORE")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(NeighborlyTheme.textMuted)
+                        .tracking(0.5)
 
-                VStack(spacing: 10) {
-                    ForEach(storePrices, id: \.store) { entry in
-                        HStack {
-                            Circle()
-                                .fill(entry.store == "ShopRite" ? NeighborlyTheme.green : NeighborlyTheme.orange)
-                                .frame(width: 8, height: 8)
+                    VStack(spacing: 10) {
+                        ForEach(product.storeProducts.sorted(by: {
+                            ($0.salePrice ?? $0.price) < ($1.salePrice ?? $1.price)
+                        }), id: \.storeId) { sp in
+                            HStack {
+                                Circle()
+                                    .fill(NeighborlyTheme.green)
+                                    .frame(width: 8, height: 8)
 
-                            Text(entry.store)
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(NeighborlyTheme.textPrimary)
+                                Text(sp.stores.chain ?? sp.stores.name)
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundStyle(NeighborlyTheme.textPrimary)
 
-                            if !entry.isReal {
-                                Text("est.")
-                                    .font(.caption2)
-                                    .foregroundStyle(NeighborlyTheme.textMuted)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(NeighborlyTheme.background)
-                                    .clipShape(Capsule())
+                                if !sp.inStock {
+                                    Text("out of stock")
+                                        .font(.caption2)
+                                        .foregroundStyle(.red.opacity(0.7))
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(NeighborlyTheme.background)
+                                        .clipShape(Capsule())
+                                }
+
+                                Spacer()
+
+                                VStack(alignment: .trailing, spacing: 1) {
+                                    if let sale = sp.salePrice {
+                                        Text(sale, format: .currency(code: "USD"))
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(NeighborlyTheme.green)
+                                        Text(sp.price, format: .currency(code: "USD"))
+                                            .font(.caption)
+                                            .foregroundStyle(NeighborlyTheme.textMuted)
+                                            .strikethrough()
+                                    } else {
+                                        Text(sp.price, format: .currency(code: "USD"))
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(NeighborlyTheme.green)
+                                    }
+                                }
                             }
-
-                            Spacer()
-
-                            if let price = entry.price {
-                                Text(price, format: .currency(code: "USD"))
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(entry.isReal ? NeighborlyTheme.green : NeighborlyTheme.textSecondary)
-                            } else {
-                                Text("—")
-                                    .font(.subheadline)
-                                    .foregroundStyle(NeighborlyTheme.textMuted)
-                            }
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 14)
+                            .background(NeighborlyTheme.cardBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 14)
-                        .background(NeighborlyTheme.cardBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
-                }
+                } else {
+                    // No product data so only show stored price
+                    Text("STORED PRICE")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(NeighborlyTheme.textMuted)
+                        .tracking(0.5)
 
-                Text("Real prices from ShopRite. Other stores coming soon.")
-                    .font(.caption)
-                    .foregroundStyle(NeighborlyTheme.textMuted)
-                    .frame(maxWidth: .infinity, alignment: .center)
+                    HStack {
+                        Circle()
+                            .fill(NeighborlyTheme.orange)
+                            .frame(width: 8, height: 8)
+                        Text("Last known price")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(NeighborlyTheme.textPrimary)
+                        Spacer()
+                        Text(item.price, format: .currency(code: "USD"))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(NeighborlyTheme.orange)
+                    }
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 14)
+                    .background(NeighborlyTheme.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    Text("Search for this item to see current store prices.")
+                        .font(.caption)
+                        .foregroundStyle(NeighborlyTheme.textMuted)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
             }
             .padding(20)
 
