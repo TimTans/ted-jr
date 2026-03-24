@@ -2,6 +2,9 @@
 .gradle/
 local.properties
 
+# Env / secrets (use .env.example as template)
+.env
+
 # Build outputs
 build/
 app/build/

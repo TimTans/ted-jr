@@ -6,23 +6,31 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import com.example.android.ui.home.HomeScreen
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.example.android.ui.AppScaffold
 import com.example.android.ui.login.LoginScreen
 import com.example.android.viewmodel.home.HomeViewModel
 import com.example.android.viewmodel.login.LoginViewModel
+import com.example.android.viewmodel.shopper.ShopperViewModel
 
 class MainActivity : ComponentActivity() {
     private val loginViewModel: LoginViewModel by viewModels()
     private val homeViewModel: HomeViewModel by viewModels()
+    private val shopperViewModel: ShopperViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
                 Surface {
-                    val loginState = loginViewModel.uiState
+                    val loginState by loginViewModel.uiState.collectAsState()
                     if (loginState.isLoggedIn) {
-                        HomeScreen(viewModel = homeViewModel)
+                        AppScaffold(
+                            loginViewModel = loginViewModel,
+                            homeViewModel = homeViewModel,
+                            shopperViewModel = shopperViewModel
+                        )
                     } else {
                         LoginScreen(viewModel = loginViewModel)
                     }
@@ -31,4 +39,3 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
