@@ -525,7 +525,7 @@ export default function NeighborlySettings() {
           </div>
 
           {/* Profile */}
-          <ProfileDropdown />
+          <ProfileDropdown showSettings={true} />
         </div>
       </header>
 
@@ -560,7 +560,7 @@ export default function NeighborlySettings() {
 
             {/* Back to dashboard — visible and scannable at top of content */}
             <Link
-              href="/userdashboard"
+              href="/dashboard"
               className="inline-flex items-center gap-1.5 text-sm font-medium text-stone-500 hover:text-green-700 transition-colors mb-4 sm:mb-6"
             >
               <span aria-hidden>←</span>

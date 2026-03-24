@@ -22,12 +22,21 @@ export async function login(formData: FormData) {
   .eq('id', data.user.id)
   .single()
 
+  if (profile?.role === 'admin') {
+    revalidatePath('/admin', 'layout')
+    redirect('/admin')
+  }
+
   if (profile?.role === 'vendor') {
     revalidatePath('/vendordashboard', 'layout')
     redirect('/vendordashboard')
   }
 
+  if (profile?.role === 'pending_vendor') {
+    redirect('/auth/pending-approval')
+  }
+
   // Default: shopper
-  revalidatePath('/userdashboard', 'layout')
-  redirect('/userdashboard')
+  revalidatePath('/dashboard', 'layout')
+  redirect('/dashboard')
 }
