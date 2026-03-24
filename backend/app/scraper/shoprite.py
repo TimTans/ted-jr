@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 
 _PAGE_SIZE = 30
 
+
+class CloudflareBlockedError(RuntimeError):
+    """raised when cloudflare challenge is detected during scraping."""
+    pass
+
 # consistent user agent used by both save_session.py and scrape_store().
 # cloudflare binds cf_clearance cookies to the user agent string, so both
 # the headed session (where the challenge is solved) and the headless
@@ -43,22 +48,12 @@ class StoreConfig:
     """
     configuration for a single shoprite store + category to scrape.
 
-    store_id: shoprite's numeric store id (e.g. "139")
-    zip_code: human-readable location context, used in filenames and logs
-    category_id: the category id (e.g. "520592")
-    breadcrumb: the category breadcrumb (e.g. "grocery/dairy/milk")
-    browse_url: the exact category page URL to navigate to. find this by
-                opening shoprite.com, selecting your store, browsing to the
-                category, and copying the URL from the address bar.
-
-    # Future (multi-store): pass list[StoreConfig] to the runner
-    # and call scrape_store() for each, either sequentially or with
-    # asyncio.gather() for concurrent scraping.
+    store_id: shoprite's numeric store id (e.g. "218")
+    zip_code: human-readable location context
+    browse_url: the exact category page URL to navigate to.
     """
     store_id: str
     zip_code: str
-    category_id: str
-    breadcrumb: str
     browse_url: str
 
 
@@ -68,15 +63,7 @@ class ShopRiteProduct:
     a single product scraped from shoprite.
 
     upc is nullable so products without a upc are still stored but cannot get
-    further data via the fdc nutrition api (as of now - could look into alt option of searching?)
-
-    # Future (full product data): add these fields once confirmed
-    # present in the preloaded state:
-    # category: str     - item.get("category")
-    # image_url: str    - item.get("image", {}).get("default")
-    # brand: str        - item.get("brand")
-    # on_sale: bool.    - item.get("isDiscounted")
-    # sale_price: float - parse item.get("wasPrice") when isDiscounted
+    further data via the fdc nutrition api.
     """
     name: str
     price: float
@@ -84,8 +71,12 @@ class ShopRiteProduct:
     upc: str | None
     store_id: str
     store_zip: str
-    # ISO 8601
     scraped_at: str
+    brand: str | None = None
+    category: str | None = None
+    image_url: str | None = None
+    on_sale: bool = False
+    sale_price: float | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -96,6 +87,11 @@ class ShopRiteProduct:
             "store_id": self.store_id,
             "store_zip": self.store_zip,
             "scraped_at": self.scraped_at,
+            "brand": self.brand,
+            "category": self.category,
+            "image_url": self.image_url,
+            "on_sale": self.on_sale,
+            "sale_price": self.sale_price,
         }
 
 
@@ -117,12 +113,33 @@ def _parse_preloaded_products(
         try:
             name = item["name"]
 
-            # price comes as "$4.09" string -> strip dollar sign and parse
-            price_str = item["price"]
-            price = float(price_str.replace("$", "").replace(",", ""))
+            # price comes as "$4.09", "$10.21 avg/ea", or "$2.99/lb"
+            price_str = item["price"].replace("$", "").replace(",", "")
+            # strip trailing suffixes: "avg/ea", "/lb", "/ea", etc.
+            price_str = price_str.split()[0] if " " in price_str else price_str
+            price_str = price_str.split("/")[0]
+            price = float(price_str)
 
             size = item.get("unitOfSize", {})
             unit_size = f"{size.get('size', '')} {size.get('abbreviation', '')}".strip()
+
+            # sale price: parse wasPrice when item is discounted
+            on_sale = bool(item.get("isDiscounted", False))
+            sale_price = None
+            if on_sale:
+                was_price_str = item.get("wasPrice", "")
+                if was_price_str:
+                    try:
+                        # "price" is the current (sale) price, wasPrice is the original
+                        # so sale_price = current price, and price = original
+                        sale_price = price
+                        price = float(was_price_str.replace("$", "").replace(",", ""))
+                    except (ValueError, TypeError):
+                        sale_price = None
+
+            # image url from nested image object
+            image_data = item.get("image", {})
+            image_url = image_data.get("default") if isinstance(image_data, dict) else None
 
             products.append(ShopRiteProduct(
                 name=name,
@@ -132,6 +149,11 @@ def _parse_preloaded_products(
                 store_id=config.store_id,
                 store_zip=config.zip_code,
                 scraped_at=scraped_at,
+                brand=item.get("brand"),
+                category=item.get("category"),
+                image_url=image_url,
+                on_sale=on_sale,
+                sale_price=sale_price,
             ))
         except (KeyError, TypeError, ValueError) as e:
             logger.warning("skipping malformed product (sku=%s): %s", sku, e)
@@ -158,6 +180,7 @@ def _dedup_products(products: list[ShopRiteProduct]) -> list[ShopRiteProduct]:
 async def scrape_store(
     config: StoreConfig,
     session_state: str | Path | None = None,
+    headless: bool = False,
 ) -> list[ShopRiteProduct]:
     """
     scrape all products for a single shoprite store + category.
@@ -171,15 +194,20 @@ async def scrape_store(
         with scripts/save_session.py. if None, the scraper will attempt
         without session cookies (will fail if cloudflare is active).
 
-    edge case of 0 products but "successful" scraoe ->
+    headless: whether to run the browser in headless mode. currently defaults
+        to False (headed) because cloudflare blocks headless chromium on
+        paginated requests (page 2+). the first page works headless, but
+        subsequent pages get flagged.
+
+        to switch back to headless:
+          1. set headless=True here (or pass headless=True from the caller)
+          2. cloudflare may block pagination(IF USING VPN USE RESIDENTIAL IP) if so, try increasing the
+             wait_for_timeout delay (currently 2000ms) to 5000-10000ms
+          3. if still blocked, headless needs session cookies from
+             save_session.py and the anti-detection args below
+
+    edge case of 0 products but "successful" scrape ->
     raise RuntimeError if zero products are collected.
-
-    # Future (multi-store): call concurrently:
-    #   results = await asyncio.gather(*[scrape_store(c) for c in configs])
-    #   all_products = [p for batch in results for p in batch]
-
-    # Future (fastapi integration):
-    #   background_tasks.add_task(scrape_store, config)
     """
     from playwright.async_api import async_playwright
 
@@ -195,10 +223,24 @@ async def scrape_store(
     collected: list[ShopRiteProduct] = []
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        # cloudflare binds cf_clearance to the TLS/browser fingerprint.
+        # headed mode avoids fingerprint mismatch entirely. if switching
+        # to headless=True(switch back if you stop scraping after second page) keep the anti-detection args below they
+        # suppress automation signals that cloudflare checks.
+        browser = await p.chromium.launch(
+            headless=headless,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+            ],
+        )
         context = await browser.new_context(
             storage_state=str(session_state) if session_state else None,
             user_agent=USER_AGENT,
+        )
+        # remove navigator.webdriver flag that cloudflare checks.
+        # only matters in headless mode but harmless in headed mode.
+        await context.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
         )
         page = await context.new_page()
 
@@ -220,10 +262,9 @@ async def scrape_store(
             # detect cloudflare challenge page
             title = await page.title()
             if "just a moment" in title.lower():
-                raise RuntimeError(
+                raise CloudflareBlockedError(
                     "blocked by cloudflare challenge. session cookies are "
-                    "missing or expired — run:\n"
-                    "  PYTHONPATH=. uv run python scripts/save_session.py"
+                    "missing or expired."
                 )
 
             # extract product data from the redux preloaded state
@@ -270,7 +311,7 @@ async def scrape_store(
     if not products:
         raise RuntimeError(
             f"scrape completed for store {config.store_id} / category "
-            f"{config.category_id} but no products were collected — "
+            f"{config.category_id} but no products were collected - "
             "check browse_url in StoreConfig. if cloudflare is active, "
             "run scripts/save_session.py to refresh session cookies."
         )
