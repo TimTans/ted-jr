@@ -1,18 +1,22 @@
 """
 multi-store, multi-category scrape configuration.
 
-category_id and url_path come from shoprite.com
+shoprite:
+    category_id and url_path come from shoprite.com. browse to a category with
+    your store selected and extract from the URL:
+    /sm/planning/rsid/{store_id}/categories/{url_path}-id-{category_id}?f=Breadcrumb:...
 
-manually:
-browse to a category with
-your store selected and extract from the URL:
+keyfood banners (marketplace, key food, superfresh, food universe, etc.):
+    all keyfood cooperative banners share the same SAP Hybris platform with
+    identical department slugs and DOM structure. only the subdomain and
+    site path differ:
+        https://{subdomain}.keyfood.com/store/{site_id}/en/c/dept/dept-{store_id}-{slug}
 
-/sm/planning/rsid/{store_id}/categories/{url_path}-id-{category_id}?f=Breadcrumb:...
-
-stores are defined with their shoprite rsid and zip code.
+    sessions (cookies) are per-subdomain, so each banner needs its own
+    session file saved via save_keyfood_session.py --banner <name>.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import quote
 
 
@@ -27,12 +31,67 @@ class CategoryConfig:
 
 
 @dataclass
+class KeyFoodCategoryConfig:
+    """a keyfood department to scrape (shared across all banners)."""
+    name: str
+    slug: str
+
+
+# keep alias for backwards compat with db_writer import
+MarketplaceCategoryConfig = KeyFoodCategoryConfig
+
+
+@dataclass
+class KeyFoodBanner:
+    """a keyfood cooperative banner (marketplace, key food, superfresh, etc.)."""
+    name: str
+    subdomain: str
+    site_id: str
+    chain: str
+
+    @property
+    def base_url(self) -> str:
+        return f"https://{self.subdomain}.keyfood.com/store/{self.site_id}/en"
+
+    @property
+    def store_locator_url(self) -> str:
+        return f"{self.base_url}/store-locator"
+
+    @property
+    def domain(self) -> str:
+        return f"https://{self.subdomain}.keyfood.com"
+
+
+KEYFOOD_BANNERS: dict[str, KeyFoodBanner] = {
+    "marketplace": KeyFoodBanner(
+        name="Marketplace",
+        subdomain="marketplace",
+        site_id="marketplace",
+        chain="marketplace",
+    ),
+    "keyfood": KeyFoodBanner(
+        name="Key Food",
+        subdomain="keyfoodstores",
+        site_id="keyfoodstores",
+        chain="keyfood",
+    ),
+    "superfresh": KeyFoodBanner(
+        name="SuperFresh",
+        subdomain="superfresh",
+        site_id="superfresh",
+        chain="superfresh",
+    ),
+}
+
+
+@dataclass
 class StoreInfo:
-    """a shoprite store location."""
+    """a store location (works for any chain)."""
     store_id: str
     zip_code: str
     name: str
     chain: str = "shoprite"
+    banner: str = ""  # key in KEYFOOD_BANNERS, empty for non-keyfood stores
 
 STORES = [
     StoreInfo(store_id="218", zip_code="11230", name="ShopRite Brooklyn"),
@@ -148,6 +207,47 @@ CATEGORIES = [
 ]
 
 
+KEYFOOD_STORES = [
+    StoreInfo(
+        store_id="2138",
+        zip_code="11215",
+        name="Marketplace Brooklyn",
+        chain="marketplace",
+        banner="marketplace",
+    ),
+    StoreInfo(
+        store_id="2496",
+        zip_code="11215",
+        name="Urban Market Brooklyn",
+        chain="keyfood",
+        banner="keyfood",
+    ),
+    StoreInfo(
+        store_id="2765",
+        zip_code="11215",
+        name="K-Slope Marketplace Brooklyn",
+        chain="keyfood",
+        banner="keyfood",
+    ),
+]
+
+# department slugs are shared across all keyfood banners.
+# to discover more: browse any banner's departments page.
+KEYFOOD_CATEGORIES = [
+    KeyFoodCategoryConfig(name="Bakery", slug="bakery"),
+    KeyFoodCategoryConfig(name="Beverages", slug="beverages"),
+    KeyFoodCategoryConfig(name="Breakfast", slug="breakfast"),
+    KeyFoodCategoryConfig(name="Deli", slug="deli"),
+    KeyFoodCategoryConfig(name="Frozen", slug="frozen"),
+    KeyFoodCategoryConfig(name="International", slug="international"),
+    KeyFoodCategoryConfig(name="Meat and Seafood", slug="meatandseafood"),
+    KeyFoodCategoryConfig(name="Pantry", slug="pantry"),
+    KeyFoodCategoryConfig(name="Produce", slug="produce"),
+    KeyFoodCategoryConfig(name="Refrigerated", slug="refrigerated"),
+    KeyFoodCategoryConfig(name="Snacks", slug="snacks"),
+]
+
+
 def build_browse_url(store: StoreInfo, category: CategoryConfig) -> str:
     """
     construct the full shoprite browse URL for a store + category.
@@ -161,3 +261,23 @@ def build_browse_url(store: StoreInfo, category: CategoryConfig) -> str:
         f"/categories/{category.url_path}-id-{category.category_id}"
         f"?f=Breadcrumb%3A{encoded_breadcrumb}"
     )
+
+
+def build_keyfood_url(
+    banner: KeyFoodBanner,
+    store: StoreInfo,
+    category: KeyFoodCategoryConfig,
+) -> str:
+    """
+    construct a keyfood category URL for any banner + store + department.
+
+    example output:
+    https://marketplace.keyfood.com/store/marketplace/en/c/dept/dept-2138-refrigerated
+    https://keyfoodstores.keyfood.com/store/keyFood/en/c/dept/dept-1264-refrigerated
+    """
+    return f"{banner.base_url}/c/dept/dept-{store.store_id}-{category.slug}"
+
+
+def get_keyfood_session_path(banner_key: str) -> str:
+    """return the session file name for a given banner."""
+    return f"{banner_key}_session.json"
