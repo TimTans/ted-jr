@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -48,9 +49,11 @@ fun LoginScreen(viewModel: LoginViewModel) {
     LoginContent(
         state = state,
         onModeChange = viewModel::onToggleMode,
-        onNameChange = viewModel::onNameChange,
+        onFirstNameChange = viewModel::onFirstNameChange,
+        onLastNameChange = viewModel::onLastNameChange,
         onEmailChange = viewModel::onEmailChange,
         onPasswordChange = viewModel::onPasswordChange,
+        onConfirmPasswordChange = viewModel::onConfirmPasswordChange,
         onSubmit = viewModel::onSubmit
     )
 }
@@ -59,9 +62,11 @@ fun LoginScreen(viewModel: LoginViewModel) {
 private fun LoginContent(
     state: LoginUiState,
     onModeChange: (Boolean) -> Unit,
-    onNameChange: (String) -> Unit,
+    onFirstNameChange: (String) -> Unit,
+    onLastNameChange: (String) -> Unit,
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
+    onConfirmPasswordChange: (String) -> Unit,
     onSubmit: () -> Unit
 ) {
     Box(
@@ -137,13 +142,22 @@ private fun LoginContent(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     if (state.isSignUp) {
-                        OutlinedTextField(
-                            value = state.name,
-                            onValueChange = onNameChange,
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Name") },
-                            singleLine = true
-                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedTextField(
+                                value = state.firstName,
+                                onValueChange = onFirstNameChange,
+                                modifier = Modifier.weight(1f),
+                                label = { Text("First Name") },
+                                singleLine = true
+                            )
+                            OutlinedTextField(
+                                value = state.lastName,
+                                onValueChange = onLastNameChange,
+                                modifier = Modifier.weight(1f),
+                                label = { Text("Last Name") },
+                                singleLine = true
+                            )
+                        }
                     }
 
                     OutlinedTextField(
@@ -163,6 +177,35 @@ private fun LoginContent(
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation()
                     )
+
+                    if (state.isSignUp) {
+                        OutlinedTextField(
+                            value = state.confirmPassword,
+                            onValueChange = onConfirmPasswordChange,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Confirm Password") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation()
+                        )
+                    }
+                }
+
+                state.errorMessage?.let { error ->
+                    Text(
+                        text = error,
+                        color = Color(0xFFB3261E),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                state.infoMessage?.let { info ->
+                    Text(
+                        text = info,
+                        color = NeighborlyGreen,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
 
                 Button(
@@ -178,9 +221,19 @@ private fun LoginContent(
                     Text(text = if (state.isSignUp) "Create Account" else "Log In")
                 }
 
+                Text(
+                    text = if (state.isSignUp) {
+                        "Vendor approval is handled on web. Mobile sign-up creates a shopper account."
+                    } else {
+                        "Use the same Supabase-backed account across Android, iOS, and web."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF7C7C7C),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 Spacer(modifier = Modifier.height(4.dp))
             }
         }
     }
 }
-
