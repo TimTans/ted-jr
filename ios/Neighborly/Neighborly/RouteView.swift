@@ -41,6 +41,11 @@ struct RouteView: View {
     private func routeContent(_ route: OptimizedRoute) -> some View {
         ScrollView {
             VStack(spacing: 16) {
+                // Map
+                MapboxRouteMap(stops: route.stops)
+                    .frame(height: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+
                 // Summary card
                 summaryCard(route)
 

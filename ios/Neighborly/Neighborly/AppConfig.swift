@@ -40,4 +40,13 @@ enum AppConfig {
         }
         return url
     }()
+
+    static let mapboxAccessToken: String = {
+        guard let token = Bundle.main.infoDictionary?["MAPBOX_ACCESS_TOKEN"] as? String,
+              !token.isEmpty,
+              token != "YOUR_MAPBOX_PUBLIC_TOKEN" else {
+            return ""
+        }
+        return token
+    }()
 }
