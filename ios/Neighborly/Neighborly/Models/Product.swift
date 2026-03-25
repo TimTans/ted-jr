@@ -22,7 +22,7 @@ struct Product: Codable, Identifiable, Hashable {
         guard let best = storeProducts.min(by: {
             ($0.salePrice ?? $0.price) < ($1.salePrice ?? $1.price)
         }) else { return nil }
-        return best.stores.chain ?? best.stores.name
+        return best.stores.name
     }
 }
 
