@@ -75,12 +75,12 @@ KEYFOOD_BANNERS: dict[str, KeyFoodBanner] = {
         site_id="keyfoodstores",
         chain="keyfood",
     ),
-    "superfresh": KeyFoodBanner(
-        name="SuperFresh",
-        subdomain="superfresh",
-        site_id="superfresh",
-        chain="superfresh",
-    ),
+    # "superfresh": KeyFoodBanner(
+    #     name="SuperFresh",
+    #     subdomain="superfresh",
+    #     site_id="superfresh",
+    #     chain="superfresh",
+    # ),
 }
 
 
@@ -226,6 +226,13 @@ KEYFOOD_STORES = [
         store_id="2765",
         zip_code="11215",
         name="K-Slope Marketplace Brooklyn",
+        chain="keyfood",
+        banner="keyfood",
+    ),
+    StoreInfo(
+        store_id="1770",
+        zip_code="11215",
+        name="Windsor Farms Market Brooklyn",
         chain="keyfood",
         banner="keyfood",
     ),
