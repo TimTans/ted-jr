@@ -79,9 +79,39 @@ struct Store: Codable, Hashable {
     let chain: String?
     let storeNumber: String?
     let zipCode: String?
+    let address: String?
+    let lat: Double?
+    let lng: Double?
 }
 
 struct ProductSearchResponse: Codable {
     let data: [Product]
     let count: Int
+}
+
+// MARK: - Route Optimization
+
+struct OptimizedRoute: Codable {
+    let totalCost: Double
+    let stops: [RouteStop]
+    let itemsNotFound: [String]
+}
+
+struct RouteStop: Codable, Identifiable {
+    var id: String { store.id ?? store.name }
+    let store: Store
+    let items: [RouteItem]
+    let subtotal: Double
+}
+
+struct RouteItem: Codable, Identifiable {
+    var id: String { productId }
+    let productId: String
+    let name: String
+    let brand: String?
+    let unitSize: String
+    let imageUrl: String?
+    let categorySlug: String?
+    let price: Double
+    let salePrice: Double?
 }

@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import Network
+import CoreLocation
 
 // MARK: - Network Monitor
 
@@ -34,11 +35,41 @@ final class NetworkMonitor {
     }
 }
 
+// MARK: - Location Manager
+
+final class LocationHelper: NSObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+    private(set) var lastLocation: CLLocation?
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+    }
+
+    func requestIfNeeded() {
+        if manager.authorizationStatus == .notDetermined {
+            manager.requestWhenInUseAuthorization()
+        }
+        manager.requestLocation()
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        lastLocation = locations.last
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        // silently fall back to no location — tiebreaker just won't apply
+    }
+}
+
 // MARK: - Grocery List View
 
 struct GroceryListView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \GroceryListItem.dateAdded, order: .reverse) private var items: [GroceryListItem]
+    var routeState: RouteState
+    @Binding var selectedTab: Int
 
     @State private var searchText = ""
     @State private var searchResults: [Product] = []
@@ -48,6 +79,7 @@ struct GroceryListView: View {
     @State private var selectedProduct: Product?
     @State private var searchDetailProduct: Product?
     @State private var networkMonitor = NetworkMonitor()
+    @State private var locationHelper = LocationHelper()
 
     var body: some View {
         NavigationStack {
@@ -73,6 +105,11 @@ struct GroceryListView: View {
                         emptyState
                     } else {
                         groceryList
+                    }
+
+                    // Create Route button (visible when list has items and search is inactive)
+                    if !items.isEmpty && searchText.isEmpty {
+                        createRouteButton
                     }
                 }
             }
@@ -336,6 +373,62 @@ struct GroceryListView: View {
         .scrollContentBackground(.hidden)
     }
 
+    // MARK: - Create Route
+
+    private var createRouteButton: some View {
+        Button {
+            Task { await optimizeRoute() }
+        } label: {
+            HStack(spacing: 8) {
+                if routeState.isOptimizing {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Image(systemName: "paperplane.fill")
+                }
+                Text(routeState.isOptimizing ? "Optimizing..." : "Create Route")
+                    .fontWeight(.semibold)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(routeState.isOptimizing ? NeighborlyTheme.green.opacity(0.6) : NeighborlyTheme.green)
+            .foregroundStyle(.white)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .disabled(routeState.isOptimizing)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
+    private func optimizeRoute() async {
+        let productIds = items.compactMap { $0.productId }
+        guard !productIds.isEmpty else {
+            routeState.error = "No products to optimize"
+            return
+        }
+
+        // request location for tiebreaking (non-blocking)
+        locationHelper.requestIfNeeded()
+
+        routeState.isOptimizing = true
+        routeState.error = nil
+
+        do {
+            let loc = locationHelper.lastLocation
+            let route = try await APIService.optimizeRoute(
+                productIds: productIds,
+                userLat: loc?.coordinate.latitude,
+                userLng: loc?.coordinate.longitude
+            )
+            routeState.optimizedRoute = route
+            routeState.isOptimizing = false
+            selectedTab = 2
+        } catch {
+            routeState.error = "Couldn't optimize route"
+            routeState.isOptimizing = false
+        }
+    }
+
     // MARK: - Actions
 
     private func performSearch() async {
@@ -402,10 +495,11 @@ struct GroceryListView: View {
         await withTaskGroup(of: Void.self) { group in
             for item in itemsToRefresh {
                 guard let productId = item.productId else { continue }
+                let currentPrice = item.price
                 group.addTask {
                     do {
                         let product = try await APIService.getProduct(id: productId)
-                        if let newPrice = product.bestPrice, newPrice != item.price {
+                        if let newPrice = product.bestPrice, newPrice != currentPrice {
                             await MainActor.run {
                                 item.price = newPrice
                             }
@@ -769,6 +863,6 @@ struct ProductDetailSheet: View {
 // MARK: - Preview
 
 #Preview {
-    GroceryListView()
+    GroceryListView(routeState: RouteState(), selectedTab: .constant(1))
         .modelContainer(for: GroceryListItem.self, inMemory: true)
 }
