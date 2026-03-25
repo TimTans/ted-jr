@@ -92,10 +92,17 @@ class StoreInfo:
     name: str
     chain: str = "shoprite"
     banner: str = ""  # key in KEYFOOD_BANNERS, empty for non-keyfood stores
+    lat: float = 0.0
+    lng: float = 0.0
+    address: str = ""
 
 STORES = [
-    StoreInfo(store_id="218", zip_code="11230", name="ShopRite Brooklyn"),
-    StoreInfo(store_id="204", zip_code="11356", name="ShopRite Queens"),
+    StoreInfo(store_id="218", zip_code="11230", name="ShopRite Brooklyn",
+              lat=40.62771, lng=-73.97597,
+              address="1080 McDonald Ave, Brooklyn, NY 11230"),
+    StoreInfo(store_id="204", zip_code="11356", name="ShopRite Queens",
+              lat=40.78331, lng=-73.83506,
+              address="133-11 20th Ave, College Point, NY 11356"),
 ]
 
 CATEGORIES = [
@@ -214,6 +221,8 @@ KEYFOOD_STORES = [
         name="Marketplace Brooklyn",
         chain="marketplace",
         banner="marketplace",
+        lat=40.66374, lng=-73.99061,
+        address="615 5th Ave, Brooklyn, NY 11215",
     ),
     StoreInfo(
         store_id="2496",
@@ -221,6 +230,8 @@ KEYFOOD_STORES = [
         name="Urban Market Brooklyn",
         chain="keyfood",
         banner="keyfood",
+        lat=40.66706, lng=-73.98784,
+        address="509 5th Ave, Brooklyn, NY 11215",
     ),
     StoreInfo(
         store_id="2765",
@@ -228,6 +239,8 @@ KEYFOOD_STORES = [
         name="K-Slope Marketplace Brooklyn",
         chain="keyfood",
         banner="keyfood",
+        lat=40.66907, lng=-73.98528,
+        address="329 9th St, Brooklyn, NY 11215",
     ),
     StoreInfo(
         store_id="1770",
@@ -235,6 +248,8 @@ KEYFOOD_STORES = [
         name="Windsor Farms Market Brooklyn",
         chain="keyfood",
         banner="keyfood",
+        lat=40.65676, lng=-73.97769,
+        address="589 Prospect Ave, Brooklyn, NY 11215",
     ),
 ]
 

@@ -43,16 +43,26 @@ async def ensure_store_exists(store: StoreInfo) -> str:
     ).eq("chain", store.chain).execute()
 
     if result.data:
-        return result.data[0]["id"]
+        store_uuid = result.data[0]["id"]
+        # update location fields if config has real values
+        updates = {}
+        if store.lat or store.lng:
+            updates["lat"] = store.lat
+            updates["lng"] = store.lng
+        if store.address:
+            updates["address"] = store.address
+        if updates:
+            sb.table("stores").update(updates).eq("id", store_uuid).execute()
+        return store_uuid
 
     result = sb.table("stores").insert({
         "name": store.name,
         "chain": store.chain,
         "store_number": store.store_id,
         "zip_code": store.zip_code,
-        "address": f"{store.name}, {store.zip_code}",
-        "lat": 0,
-        "lng": 0,
+        "address": store.address or f"{store.name}, {store.zip_code}",
+        "lat": store.lat,
+        "lng": store.lng,
     }).execute()
 
     store_uuid = result.data[0]["id"]
