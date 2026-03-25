@@ -1,7 +1,14 @@
 import SwiftUI
+import SwiftData
 
 struct RouteView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query private var groceryItems: [GroceryListItem]
     var routeState: RouteState
+
+    @State private var swapItem: RouteItem?
+    @State private var alternatives: [Product] = []
+    @State private var isLoadingAlternatives = false
 
     var body: some View {
         NavigationStack {
@@ -16,6 +23,16 @@ struct RouteView: View {
             }
             .navigationTitle("Route")
             .navigationBarTitleDisplayMode(.inline)
+            .sheet(item: $swapItem) { item in
+                SwapSheet(
+                    item: item,
+                    alternatives: alternatives,
+                    isLoading: isLoadingAlternatives
+                ) { replacement in
+                    performSwap(original: item, replacement: replacement)
+                }
+                .presentationDetents([.medium, .large])
+            }
         }
     }
 
@@ -158,43 +175,50 @@ struct RouteView: View {
 
             Divider()
 
-            // Item rows
+            // Item rows — tappable for swap
             ForEach(stop.items) { item in
-                HStack(spacing: 10) {
-                    // Category emoji
-                    let emoji = categoryEmojiForSlug(item.categorySlug)
-                    Text(emoji)
-                        .font(.title3)
-                        .frame(width: 32, height: 32)
-                        .background(NeighborlyTheme.greenSoft)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                Button {
+                    Task { await loadAlternatives(for: item) }
+                } label: {
+                    HStack(spacing: 10) {
+                        let emoji = categoryEmojiForSlug(item.categorySlug)
+                        Text(emoji)
+                            .font(.title3)
+                            .frame(width: 32, height: 32)
+                            .background(NeighborlyTheme.greenSoft)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
 
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(item.name)
-                            .font(.caption)
-                            .foregroundStyle(NeighborlyTheme.textPrimary)
-                            .lineLimit(1)
-                        Text(item.unitSize)
-                            .font(.caption2)
-                            .foregroundStyle(NeighborlyTheme.textMuted)
-                    }
-
-                    Spacer()
-
-                    if let sale = item.salePrice {
-                        VStack(alignment: .trailing, spacing: 1) {
-                            Text(sale, format: .currency(code: "USD"))
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(NeighborlyTheme.green)
-                            Text(item.price, format: .currency(code: "USD"))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(item.name)
+                                .font(.caption)
+                                .foregroundStyle(NeighborlyTheme.textPrimary)
+                                .lineLimit(1)
+                            Text(item.unitSize)
                                 .font(.caption2)
                                 .foregroundStyle(NeighborlyTheme.textMuted)
-                                .strikethrough()
                         }
-                    } else {
-                        Text(item.price, format: .currency(code: "USD"))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(NeighborlyTheme.green)
+
+                        Spacer()
+
+                        if let sale = item.salePrice {
+                            VStack(alignment: .trailing, spacing: 1) {
+                                Text(sale, format: .currency(code: "USD"))
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(NeighborlyTheme.green)
+                                Text(item.price, format: .currency(code: "USD"))
+                                    .font(.caption2)
+                                    .foregroundStyle(NeighborlyTheme.textMuted)
+                                    .strikethrough()
+                            }
+                        } else {
+                            Text(item.price, format: .currency(code: "USD"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(NeighborlyTheme.green)
+                        }
+
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.caption2)
+                            .foregroundStyle(NeighborlyTheme.textMuted)
                     }
                 }
             }
@@ -218,6 +242,47 @@ struct RouteView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(NeighborlyTheme.orangeSoft)
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    // MARK: - Swap Logic
+
+    private func loadAlternatives(for item: RouteItem) async {
+        isLoadingAlternatives = true
+        alternatives = []
+        swapItem = item
+
+        do {
+            alternatives = try await APIService.getAlternatives(productId: item.productId)
+        } catch {
+            alternatives = []
+        }
+        isLoadingAlternatives = false
+    }
+
+    private func performSwap(original: RouteItem, replacement: Product) {
+        // Update grocery list: swap old product for new
+        if let groceryItem = groceryItems.first(where: { $0.productId == original.productId }) {
+            groceryItem.name = replacement.name
+            groceryItem.price = replacement.bestPrice ?? 0
+            groceryItem.unitSize = replacement.unitSize
+            groceryItem.upc = replacement.upc
+            groceryItem.productId = replacement.id
+        }
+
+        // Re-optimize with updated product IDs
+        let productIds = groceryItems.compactMap { $0.productId }
+        swapItem = nil
+
+        Task {
+            routeState.isOptimizing = true
+            do {
+                let route = try await APIService.optimizeRoute(productIds: productIds)
+                routeState.optimizedRoute = route
+            } catch {
+                routeState.error = "Couldn't re-optimize route"
+            }
+            routeState.isOptimizing = false
+        }
     }
 
     // MARK: - Helpers
@@ -253,6 +318,121 @@ struct RouteView: View {
         case "snacks": return "🍿"
         default: return "🛒"
         }
+    }
+}
+
+// MARK: - Swap Sheet
+
+struct SwapSheet: View {
+    let item: RouteItem
+    let alternatives: [Product]
+    let isLoading: Bool
+    let onSwap: (Product) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Current item
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("CURRENT ITEM")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(NeighborlyTheme.textMuted)
+                            .tracking(0.5)
+
+                        HStack(spacing: 10) {
+                            Text(item.name)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(NeighborlyTheme.textPrimary)
+                            Spacer()
+                            let effectivePrice = item.salePrice ?? item.price
+                            Text(effectivePrice, format: .currency(code: "USD"))
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(NeighborlyTheme.green)
+                        }
+                        .padding(12)
+                        .background(NeighborlyTheme.orangeSoft)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+
+                    Divider()
+
+                    // Alternatives
+                    Text("SWAP FOR")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(NeighborlyTheme.textMuted)
+                        .tracking(0.5)
+
+                    if isLoading {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Text("Finding alternatives...")
+                                .font(.subheadline)
+                                .foregroundStyle(NeighborlyTheme.textMuted)
+                            Spacer()
+                        }
+                        .padding(.vertical, 20)
+                    } else if alternatives.isEmpty {
+                        Text("No alternatives found in this category")
+                            .font(.subheadline)
+                            .foregroundStyle(NeighborlyTheme.textMuted)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 20)
+                    } else {
+                        VStack(spacing: 8) {
+                            ForEach(alternatives) { alt in
+                                Button {
+                                    onSwap(alt)
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(alt.name)
+                                                .font(.subheadline)
+                                                .foregroundStyle(NeighborlyTheme.textPrimary)
+                                                .lineLimit(2)
+                                                .multilineTextAlignment(.leading)
+                                            if let brand = alt.brand {
+                                                Text(brand)
+                                                    .font(.caption)
+                                                    .foregroundStyle(NeighborlyTheme.textSecondary)
+                                            }
+                                            Text(alt.unitSize)
+                                                .font(.caption2)
+                                                .foregroundStyle(NeighborlyTheme.textMuted)
+                                        }
+
+                                        Spacer()
+
+                                        if let price = alt.bestPrice {
+                                            VStack(alignment: .trailing, spacing: 2) {
+                                                Text(price, format: .currency(code: "USD"))
+                                                    .font(.subheadline.weight(.semibold))
+                                                    .foregroundStyle(NeighborlyTheme.green)
+                                                if let store = alt.bestPriceStoreName {
+                                                    Text(store)
+                                                        .font(.caption2)
+                                                        .foregroundStyle(NeighborlyTheme.textMuted)
+                                                }
+                                            }
+                                        }
+
+                                        Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                                            .font(.title3)
+                                            .foregroundStyle(NeighborlyTheme.orange)
+                                    }
+                                    .padding(12)
+                                    .background(NeighborlyTheme.cardBackground)
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(20)
+            }
+        }
+        .background(NeighborlyTheme.background)
     }
 }
 

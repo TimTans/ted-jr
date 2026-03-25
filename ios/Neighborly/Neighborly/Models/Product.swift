@@ -104,7 +104,7 @@ struct RouteStop: Codable, Identifiable {
     let subtotal: Double
 }
 
-struct RouteItem: Codable, Identifiable {
+struct RouteItem: Codable, Identifiable, Hashable {
     var id: String { productId }
     let productId: String
     let name: String

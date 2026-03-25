@@ -92,4 +92,19 @@ enum APIService {
 
         return try decoder.decode(OptimizedRoute.self, from: data)
     }
+
+    static func getAlternatives(productId: String) async throws -> [Product] {
+        let url = AppConfig.apiBaseURL
+            .appendingPathComponent("products")
+            .appendingPathComponent(productId)
+            .appendingPathComponent("alternatives")
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw APIError.serverError(statusCode: http.statusCode)
+        }
+
+        return try decoder.decode([Product].self, from: data)
+    }
 }
