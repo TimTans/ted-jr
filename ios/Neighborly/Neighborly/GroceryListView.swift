@@ -46,6 +46,7 @@ struct GroceryListView: View {
     @State private var searchError: String?
     @State private var selectedItem: GroceryListItem?
     @State private var selectedProduct: Product?
+    @State private var searchDetailProduct: Product?
     @State private var networkMonitor = NetworkMonitor()
 
     var body: some View {
@@ -80,6 +81,15 @@ struct GroceryListView: View {
             .sheet(item: $selectedItem) { item in
                 ItemDetailSheet(item: item, product: selectedProduct)
                     .presentationDetents([.medium])
+            }
+            .sheet(item: $searchDetailProduct) { product in
+                ProductDetailSheet(product: product) {
+                    addOrIncrement(product)
+                    searchDetailProduct = nil
+                    searchText = ""
+                    searchResults = []
+                }
+                .presentationDetents([.medium, .large])
             }
         }
         .task(id: searchText) {
@@ -138,30 +148,11 @@ struct GroceryListView: View {
             LazyVStack(spacing: 0) {
                 ForEach(searchResults) { product in
                     Button {
-                        addOrIncrement(product)
-                        searchText = ""
-                        searchResults = []
+                        searchDetailProduct = product
                     } label: {
                         HStack(spacing: 12) {
-                            if let imageUrl = product.imageUrl, let url = URL(string: imageUrl) {
-                                AsyncImage(url: url) { phase in
-                                    switch phase {
-                                    case .success(let image):
-                                        image
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fit)
-                                    default:
-                                        Image(systemName: "plus.circle.fill")
-                                            .font(.title3)
-                                            .foregroundStyle(NeighborlyTheme.green)
-                                    }
-                                }
+                            productThumbnail(product)
                                 .frame(width: 40, height: 40)
-                            } else {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.title3)
-                                    .foregroundStyle(NeighborlyTheme.green)
-                            }
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(product.name)
@@ -181,16 +172,24 @@ struct GroceryListView: View {
 
                             Spacer()
 
-                            if let price = product.bestPrice {
-                                VStack(alignment: .trailing, spacing: 2) {
-                                    Text(price, format: .currency(code: "USD"))
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(NeighborlyTheme.green)
-                                    if let store = product.bestPriceStoreName {
-                                        Text(store)
-                                            .font(.caption2)
-                                            .foregroundStyle(NeighborlyTheme.textMuted)
+                            HStack(spacing: 6) {
+                                if let price = product.bestPrice {
+                                    VStack(alignment: .trailing, spacing: 2) {
+                                        Text(price, format: .currency(code: "USD"))
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundStyle(NeighborlyTheme.green)
+                                        if let store = product.bestPriceStoreName {
+                                            Text(store)
+                                                .font(.caption2)
+                                                .foregroundStyle(NeighborlyTheme.textMuted)
+                                        }
                                     }
+                                }
+
+                                if product.storeProducts.count > 1 {
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption2)
+                                        .foregroundStyle(NeighborlyTheme.textMuted)
                                 }
                             }
                         }
@@ -209,6 +208,33 @@ struct GroceryListView: View {
             .padding(.horizontal, 16)
             .padding(.top, 4)
         }
+    }
+
+    /// Shows the product image if available, otherwise a category emoji.
+    @ViewBuilder
+    private func productThumbnail(_ product: Product) -> some View {
+        if let imageUrl = product.imageUrl, let url = URL(string: imageUrl) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                default:
+                    categoryEmoji(product.productCategories.emoji)
+                }
+            }
+        } else {
+            categoryEmoji(product.productCategories.emoji)
+        }
+    }
+
+    private func categoryEmoji(_ emoji: String) -> some View {
+        Text(emoji)
+            .font(.title2)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(NeighborlyTheme.greenSoft)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     // MARK: - Loading
@@ -476,8 +502,10 @@ struct ItemDetailSheet: View {
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
                             case .failure:
-                                Image(systemName: "photo")
-                                    .foregroundStyle(NeighborlyTheme.textMuted)
+                                Text(product?.productCategories.emoji ?? "🛒")
+                                    .font(.largeTitle)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                    .background(NeighborlyTheme.greenSoft)
                             default:
                                 ProgressView()
                             }
@@ -485,6 +513,12 @@ struct ItemDetailSheet: View {
                         .frame(width: 72, height: 72)
                         .background(NeighborlyTheme.cardBackground)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
+                    } else {
+                        Text(product?.productCategories.emoji ?? "🛒")
+                            .font(.largeTitle)
+                            .frame(width: 72, height: 72)
+                            .background(NeighborlyTheme.greenSoft)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
@@ -518,7 +552,7 @@ struct ItemDetailSheet: View {
                                     .fill(NeighborlyTheme.green)
                                     .frame(width: 8, height: 8)
 
-                                Text(sp.stores.chain ?? sp.stores.name)
+                                Text(sp.stores.name)
                                     .font(.subheadline.weight(.medium))
                                     .foregroundStyle(NeighborlyTheme.textPrimary)
 
@@ -589,6 +623,144 @@ struct ItemDetailSheet: View {
             .padding(20)
 
             Spacer()
+        }
+        .background(NeighborlyTheme.background)
+    }
+}
+
+// MARK: - Product Detail Sheet (from search results)
+
+struct ProductDetailSheet: View {
+    let product: Product
+    let onAdd: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Capsule()
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: 36, height: 5)
+                .padding(.top, 10)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Product header
+                    HStack(alignment: .top, spacing: 14) {
+                        if let imageUrl = product.imageUrl, let url = URL(string: imageUrl) {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                case .failure:
+                                    Text(product.productCategories.emoji)
+                                        .font(.largeTitle)
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                        .background(NeighborlyTheme.greenSoft)
+                                default:
+                                    ProgressView()
+                                }
+                            }
+                            .frame(width: 72, height: 72)
+                            .background(NeighborlyTheme.cardBackground)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        } else {
+                            Text(product.productCategories.emoji)
+                                .font(.largeTitle)
+                                .frame(width: 72, height: 72)
+                                .background(NeighborlyTheme.greenSoft)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(product.name)
+                                .font(.title3.weight(.bold))
+                                .foregroundStyle(NeighborlyTheme.textPrimary)
+                            if let brand = product.brand {
+                                Text(brand)
+                                    .font(.subheadline)
+                                    .foregroundStyle(NeighborlyTheme.textSecondary)
+                            }
+                            Text(product.unitSize)
+                                .font(.subheadline)
+                                .foregroundStyle(NeighborlyTheme.textMuted)
+                        }
+                    }
+
+                    Divider()
+
+                    if !product.storeProducts.isEmpty {
+                        Text("PRICES BY STORE")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(NeighborlyTheme.textMuted)
+                            .tracking(0.5)
+
+                        VStack(spacing: 10) {
+                            ForEach(product.storeProducts.sorted(by: {
+                                ($0.salePrice ?? $0.price) < ($1.salePrice ?? $1.price)
+                            }), id: \.storeId) { sp in
+                                HStack {
+                                    Circle()
+                                        .fill(NeighborlyTheme.green)
+                                        .frame(width: 8, height: 8)
+
+                                    Text(sp.stores.name)
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(NeighborlyTheme.textPrimary)
+
+                                    if !sp.inStock {
+                                        Text("out of stock")
+                                            .font(.caption2)
+                                            .foregroundStyle(.red.opacity(0.7))
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(NeighborlyTheme.background)
+                                            .clipShape(Capsule())
+                                    }
+
+                                    Spacer()
+
+                                    VStack(alignment: .trailing, spacing: 1) {
+                                        if let sale = sp.salePrice {
+                                            Text(sale, format: .currency(code: "USD"))
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundStyle(NeighborlyTheme.green)
+                                            Text(sp.price, format: .currency(code: "USD"))
+                                                .font(.caption)
+                                                .foregroundStyle(NeighborlyTheme.textMuted)
+                                                .strikethrough()
+                                        } else {
+                                            Text(sp.price, format: .currency(code: "USD"))
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundStyle(NeighborlyTheme.green)
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 14)
+                                .background(NeighborlyTheme.cardBackground)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                        }
+                    }
+
+                    // Add to list button
+                    Button(action: onAdd) {
+                        HStack {
+                            Image(systemName: "plus.circle.fill")
+                            Text("Add to Grocery List")
+                                .fontWeight(.semibold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(NeighborlyTheme.green)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .padding(.top, 4)
+                }
+                .padding(20)
+            }
         }
         .background(NeighborlyTheme.background)
     }

@@ -30,6 +30,39 @@ struct ProductCategory: Codable, Identifiable, Hashable {
     let id: String
     let name: String
     let slug: String
+
+    /// Emoji fallback for products without images, keyed by category slug.
+    var emoji: String {
+        switch slug {
+        case "milk":                    return "🥛"
+        case "water":                   return "💧"
+        case "yogurt":                  return "🥄"
+        case "bread":                   return "🍞"
+        case "chicken":                 return "🍗"
+        case "turkey":                  return "🦃"
+        case "cereal":                  return "🥣"
+        case "eggs":                    return "🥚"
+        case "cheese":                  return "🧀"
+        case "fresh-fruit":             return "🍎"
+        case "fresh-vegetables":        return "🥬"
+        case "pasta-rice-grains":       return "🍝"
+        case "chips":                   return "🍿"
+        case "canned-packaged-foods":   return "🥫"
+        case "frozen-vegetables":       return "🥦"
+        case "bakery":                  return "🥐"
+        case "beverages":               return "🥤"
+        case "breakfast":               return "🥞"
+        case "deli":                    return "🥪"
+        case "frozen":                  return "❄️"
+        case "international":           return "🌍"
+        case "meatandseafood":          return "🥩"
+        case "pantry":                  return "🫙"
+        case "produce":                 return "🥕"
+        case "refrigerated":            return "🧊"
+        case "snacks":                  return "🍿"
+        default:                        return "🛒"
+        }
+    }
 }
 
 struct StoreProduct: Codable, Hashable {
