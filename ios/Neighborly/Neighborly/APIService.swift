@@ -65,4 +65,31 @@ enum APIService {
 
         return try decoder.decode(Product.self, from: data)
     }
+
+    static func optimizeRoute(
+        productIds: [String],
+        userLat: Double? = nil,
+        userLng: Double? = nil
+    ) async throws -> OptimizedRoute {
+        let url = AppConfig.apiBaseURL
+            .appendingPathComponent("routes")
+            .appendingPathComponent("optimize")
+
+        var body: [String: Any] = ["product_ids": productIds]
+        if let lat = userLat { body["user_lat"] = lat }
+        if let lng = userLng { body["user_lng"] = lng }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw APIError.serverError(statusCode: http.statusCode)
+        }
+
+        return try decoder.decode(OptimizedRoute.self, from: data)
+    }
 }

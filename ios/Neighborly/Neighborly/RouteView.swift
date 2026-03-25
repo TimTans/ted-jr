@@ -1,162 +1,256 @@
 import SwiftUI
 
 struct RouteView: View {
+    var routeState: RouteState
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // MARK: - Map Placeholder
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    NeighborlyTheme.greenSoft.opacity(0.5),
-                                    NeighborlyTheme.greenSoft
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(height: 220)
-                        .overlay(
-                            VStack(spacing: 10) {
-                                Image(systemName: "map.fill")
-                                    .font(.system(size: 36))
-                                    .foregroundColor(NeighborlyTheme.green)
-                                Text("Google Maps integration")
-                                    .font(.subheadline)
-                                    .foregroundColor(NeighborlyTheme.textSecondary)
-                            }
-                        )
+            ZStack {
+                NeighborlyTheme.background.ignoresSafeArea()
 
-                    // MARK: - Route Stops Card
-                    VStack(spacing: 16) {
-                        // Header row
-                        HStack {
-                            Image(systemName: "paperplane.fill")
-                                .font(.caption)
-                                .foregroundColor(NeighborlyTheme.textMuted)
-                            Text("OPTIMIZED ROUTE")
-                                .font(.caption.weight(.semibold))
-                                .foregroundColor(NeighborlyTheme.textMuted)
-                            Spacer()
-                            Text("3 stops")
-                                .font(.caption)
-                                .foregroundColor(NeighborlyTheme.green)
-                        }
-
-                        // Route stops
-                        RouteStopRow(
-                            index: 1,
-                            name: "Aldi",
-                            address: "142 Atlantic Ave",
-                            distance: "0.8 mi",
-                            time: "12 min",
-                            items: 3
-                        )
-                        RouteStopRow(
-                            index: 2,
-                            name: "Trader Joe's",
-                            address: "130 Court St",
-                            distance: "1.2 mi",
-                            time: "8 min",
-                            items: 4
-                        )
-                        RouteStopRow(
-                            index: 3,
-                            name: "Costco",
-                            address: "976 3rd Ave",
-                            distance: "2.4 mi",
-                            time: "15 min",
-                            items: 2
-                        )
-                    }
-                    .padding(16)
-                    .background(NeighborlyTheme.greenSoft)
-                    .clipShape(RoundedRectangle(cornerRadius: 24))
-
-                    // MARK: - Optimize Route Button
-                    Button(action: {}) {
-                        Text("Optimize Route")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(NeighborlyTheme.green)
-                            .clipShape(RoundedRectangle(cornerRadius: 22))
-                    }
+                if let route = routeState.optimizedRoute {
+                    routeContent(route)
+                } else {
+                    emptyState
                 }
-                .padding(16)
             }
-            .background(NeighborlyTheme.background)
             .navigationTitle("Route")
             .navigationBarTitleDisplayMode(.inline)
         }
     }
-}
 
-// MARK: - Route Stop Row
+    // MARK: - Empty State
 
-private struct RouteStopRow: View {
-    let index: Int
-    let name: String
-    let address: String
-    let distance: String
-    let time: String
-    let items: Int
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "paperplane")
+                .font(.system(size: 48))
+                .foregroundStyle(NeighborlyTheme.textMuted)
+            Text("No route yet")
+                .font(.headline)
+                .foregroundStyle(NeighborlyTheme.textPrimary)
+            Text("Add items to your grocery list,\nthen tap Create Route")
+                .font(.subheadline)
+                .foregroundStyle(NeighborlyTheme.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+    }
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            // Green circle with index number
-            Circle()
-                .fill(NeighborlyTheme.green)
-                .frame(width: 28, height: 28)
-                .overlay(
-                    Text("\(index)")
-                        .font(.caption.weight(.bold))
-                        .foregroundColor(.white)
-                )
+    // MARK: - Route Content
 
-            // Name, address, badges
-            VStack(alignment: .leading, spacing: 6) {
-                Text(name)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(NeighborlyTheme.textPrimary)
-                Text(address)
+    private func routeContent(_ route: OptimizedRoute) -> some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                // Summary card
+                summaryCard(route)
+
+                // Store stops
+                ForEach(Array(route.stops.enumerated()), id: \.element.id) { index, stop in
+                    stopCard(stop, index: index + 1)
+                }
+
+                // Items not found
+                if !route.itemsNotFound.isEmpty {
+                    notFoundCard(count: route.itemsNotFound.count)
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    // MARK: - Summary Card
+
+    private func summaryCard(_ route: OptimizedRoute) -> some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: "paperplane.fill")
                     .font(.caption)
-                    .foregroundColor(NeighborlyTheme.textMuted)
+                    .foregroundStyle(NeighborlyTheme.green)
+                Text("LOWEST COST ROUTE")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(NeighborlyTheme.green)
+                    .tracking(0.5)
+                Spacer()
+            }
 
-                HStack(spacing: 8) {
-                    // Items badge
-                    Text("\(items) items")
-                        .font(.caption2)
-                        .foregroundColor(NeighborlyTheme.green)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(NeighborlyTheme.greenSoft)
-                        .clipShape(Capsule())
+            HStack(spacing: 20) {
+                VStack(spacing: 2) {
+                    Text(route.totalCost, format: .currency(code: "USD"))
+                        .font(.title2.weight(.heavy))
+                        .foregroundStyle(NeighborlyTheme.green)
+                    Text("total")
+                        .font(.caption)
+                        .foregroundStyle(NeighborlyTheme.textMuted)
+                }
 
-                    // Time badge
-                    Text(time)
-                        .font(.caption2)
-                        .foregroundColor(NeighborlyTheme.orange)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(NeighborlyTheme.orangeSoft)
-                        .clipShape(Capsule())
+                Divider().frame(height: 36)
+
+                VStack(spacing: 2) {
+                    let totalItems = route.stops.reduce(0) { $0 + $1.items.count }
+                    Text("\(totalItems)")
+                        .font(.title2.weight(.heavy))
+                        .foregroundStyle(NeighborlyTheme.textPrimary)
+                    Text("items")
+                        .font(.caption)
+                        .foregroundStyle(NeighborlyTheme.textMuted)
+                }
+
+                Divider().frame(height: 36)
+
+                VStack(spacing: 2) {
+                    Text("\(route.stops.count)")
+                        .font(.title2.weight(.heavy))
+                        .foregroundStyle(NeighborlyTheme.textPrimary)
+                    Text(route.stops.count == 1 ? "store" : "stores")
+                        .font(.caption)
+                        .foregroundStyle(NeighborlyTheme.textMuted)
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding(20)
+        .background(NeighborlyTheme.greenSoft)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+
+    // MARK: - Stop Card
+
+    private func stopCard(_ stop: RouteStop, index: Int) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Store header
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(NeighborlyTheme.green)
+                    .frame(width: 28, height: 28)
+                    .overlay(
+                        Text("\(index)")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                    )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(stop.store.name)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(NeighborlyTheme.textPrimary)
+                    if let address = stop.store.address {
+                        Text(address)
+                            .font(.caption)
+                            .foregroundStyle(NeighborlyTheme.textMuted)
+                    }
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(stop.subtotal, format: .currency(code: "USD"))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(NeighborlyTheme.green)
+                    Text("\(stop.items.count) item\(stop.items.count == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundStyle(NeighborlyTheme.textMuted)
                 }
             }
 
-            Spacer()
+            Divider()
 
-            // Distance
-            Text(distance)
+            // Item rows
+            ForEach(stop.items) { item in
+                HStack(spacing: 10) {
+                    // Category emoji
+                    let emoji = categoryEmojiForSlug(item.categorySlug)
+                    Text(emoji)
+                        .font(.title3)
+                        .frame(width: 32, height: 32)
+                        .background(NeighborlyTheme.greenSoft)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(item.name)
+                            .font(.caption)
+                            .foregroundStyle(NeighborlyTheme.textPrimary)
+                            .lineLimit(1)
+                        Text(item.unitSize)
+                            .font(.caption2)
+                            .foregroundStyle(NeighborlyTheme.textMuted)
+                    }
+
+                    Spacer()
+
+                    if let sale = item.salePrice {
+                        VStack(alignment: .trailing, spacing: 1) {
+                            Text(sale, format: .currency(code: "USD"))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(NeighborlyTheme.green)
+                            Text(item.price, format: .currency(code: "USD"))
+                                .font(.caption2)
+                                .foregroundStyle(NeighborlyTheme.textMuted)
+                                .strikethrough()
+                        }
+                    } else {
+                        Text(item.price, format: .currency(code: "USD"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(NeighborlyTheme.green)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(NeighborlyTheme.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    // MARK: - Not Found Card
+
+    private func notFoundCard(count: Int) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundStyle(NeighborlyTheme.orange)
+            Text("\(count) item\(count == 1 ? "" : "s") not available at any store")
                 .font(.caption)
-                .foregroundColor(NeighborlyTheme.textMuted)
+                .foregroundStyle(NeighborlyTheme.textSecondary)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(NeighborlyTheme.orangeSoft)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    // MARK: - Helpers
+
+    private func categoryEmojiForSlug(_ slug: String?) -> String {
+        guard let slug else { return "🛒" }
+        switch slug {
+        case "milk": return "🥛"
+        case "water": return "💧"
+        case "yogurt": return "🥄"
+        case "bread": return "🍞"
+        case "chicken": return "🍗"
+        case "turkey": return "🦃"
+        case "cereal": return "🥣"
+        case "eggs": return "🥚"
+        case "cheese": return "🧀"
+        case "fresh-fruit": return "🍎"
+        case "fresh-vegetables": return "🥬"
+        case "pasta-rice-grains": return "🍝"
+        case "chips": return "🍿"
+        case "canned-packaged-foods": return "🥫"
+        case "frozen-vegetables": return "🥦"
+        case "bakery": return "🥐"
+        case "beverages": return "🥤"
+        case "breakfast": return "🥞"
+        case "deli": return "🥪"
+        case "frozen": return "❄️"
+        case "international": return "🌍"
+        case "meatandseafood": return "🥩"
+        case "pantry": return "🫙"
+        case "produce": return "🥕"
+        case "refrigerated": return "🧊"
+        case "snacks": return "🍿"
+        default: return "🛒"
         }
     }
 }
 
 #Preview {
-    RouteView()
+    RouteView(routeState: RouteState())
 }
