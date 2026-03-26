@@ -6,9 +6,12 @@ struct RouteView: View {
     @Query private var groceryItems: [GroceryListItem]
     var routeState: RouteState
 
+    @AppStorage("optimizationMode") private var savedPriority: String = Priority.lowestCost.rawValue
+
     @State private var swapItem: RouteItem?
     @State private var alternatives: [Product] = []
     @State private var isLoadingAlternatives = false
+    @State private var focusedStopIndex: Int?
 
     var body: some View {
         NavigationStack {
@@ -59,16 +62,45 @@ struct RouteView: View {
         ScrollView {
             VStack(spacing: 16) {
                 // Map
-                MapboxRouteMap(stops: route.stops)
-                    .frame(height: 220)
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                MapboxRouteMap(stops: route.stops) { stopIndex in
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        focusedStopIndex = stopIndex
+                    }
+                }
+                .frame(height: 220)
+                .clipShape(RoundedRectangle(cornerRadius: 20))
 
                 // Summary card
                 summaryCard(route)
 
-                // Store stops
+                // Collapsed indicator when stops are hidden
+                if let focused = focusedStopIndex, focused > 0 {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            focusedStopIndex = nil
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.up.2")
+                                .font(.caption2.weight(.bold))
+                            Text("Show all \(route.stops.count) stops")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .foregroundStyle(NeighborlyTheme.green)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(NeighborlyTheme.greenSoft)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                // Store stops hide stops before the focused one
                 ForEach(Array(route.stops.enumerated()), id: \.element.id) { index, stop in
-                    stopCard(stop, index: index + 1)
+                    if focusedStopIndex == nil || index >= focusedStopIndex! {
+                        stopCard(stop, index: index + 1)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
                 }
 
                 // Items not found
@@ -84,16 +116,16 @@ struct RouteView: View {
 
     private func summaryCard(_ route: OptimizedRoute) -> some View {
         VStack(spacing: 12) {
-            HStack {
-                Image(systemName: "paperplane.fill")
+            HStack(spacing: 6) {
+                Image(systemName: routeLabelIcon)
                     .font(.caption)
                     .foregroundStyle(NeighborlyTheme.green)
-                Text("LOWEST COST ROUTE")
+                Text(routeLabelText)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(NeighborlyTheme.green)
                     .tracking(0.5)
-                Spacer()
             }
+            .frame(maxWidth: .infinity)
 
             HStack(spacing: 20) {
                 VStack(spacing: 2) {
@@ -126,6 +158,19 @@ struct RouteView: View {
                     Text(route.stops.count == 1 ? "store" : "stores")
                         .font(.caption)
                         .foregroundStyle(NeighborlyTheme.textMuted)
+                }
+
+                if let dist = route.totalDistance, dist > 0 {
+                    Divider().frame(height: 36)
+
+                    VStack(spacing: 2) {
+                        Text(String(format: "%.1f", dist))
+                            .font(.title2.weight(.heavy))
+                            .foregroundStyle(NeighborlyTheme.textPrimary)
+                        Text("miles")
+                            .font(.caption)
+                            .foregroundStyle(NeighborlyTheme.textMuted)
+                    }
                 }
             }
             .frame(maxWidth: .infinity)
@@ -175,7 +220,7 @@ struct RouteView: View {
 
             Divider()
 
-            // Item rows — tappable for swap
+            // Item rows tappable for swap
             ForEach(stop.items) { item in
                 Button {
                     Task { await loadAlternatives(for: item) }
@@ -265,7 +310,7 @@ struct RouteView: View {
             groceryItem.name = replacement.name
             groceryItem.price = replacement.bestPrice ?? 0
             groceryItem.unitSize = replacement.unitSize
-            groceryItem.upc = replacement.upc
+            groceryItem.upc = replacement.upc ?? ""
             groceryItem.productId = replacement.id
         }
 
@@ -276,12 +321,33 @@ struct RouteView: View {
         Task {
             routeState.isOptimizing = true
             do {
-                let route = try await APIService.optimizeRoute(productIds: productIds)
+                let mode = Priority(rawValue: savedPriority)?.backendMode ?? "cost"
+                let route = try await APIService.optimizeRoute(productIds: productIds, mode: mode)
                 routeState.optimizedRoute = route
             } catch {
                 routeState.error = "Couldn't re-optimize route"
             }
             routeState.isOptimizing = false
+        }
+    }
+
+    // MARK: - Route Label
+
+    private var routeLabelText: String {
+        switch Priority(rawValue: savedPriority) {
+        case .lowestCost: return "LOWEST COST ROUTE"
+        case .shortestRoute: return "SHORTEST DISTANCE ROUTE"
+        case .fastestTrip: return "FEWEST STOPS ROUTE"
+        case .none: return "LOWEST COST ROUTE"
+        }
+    }
+
+    private var routeLabelIcon: String {
+        switch Priority(rawValue: savedPriority) {
+        case .lowestCost: return "paperplane.fill"
+        case .shortestRoute: return "point.topleft.down.to.point.bottomright.curvepath.fill"
+        case .fastestTrip: return "mappin.and.ellipse"
+        case .none: return "paperplane.fill"
         }
     }
 

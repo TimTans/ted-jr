@@ -6,7 +6,7 @@ struct Product: Codable, Identifiable, Hashable {
     let brand: String?
     let imageUrl: String?
     let unitSize: String
-    let upc: String
+    let upc: String?
     let productCategories: ProductCategory
     let storeProducts: [StoreProduct]
 
@@ -93,6 +93,7 @@ struct ProductSearchResponse: Codable {
 
 struct OptimizedRoute: Codable {
     let totalCost: Double
+    let totalDistance: Double?
     let stops: [RouteStop]
     let itemsNotFound: [String]
 }
