@@ -21,6 +21,15 @@ enum Priority: String, CaseIterable, Identifiable {
     case shortestRoute = "Shortest Route"
     case fastestTrip = "Fastest Trip"
     var id: String { rawValue }
+
+    /// maps to the backend mode parameter
+    var backendMode: String {
+        switch self {
+        case .lowestCost: return "cost"
+        case .shortestRoute: return "distance"
+        case .fastestTrip: return "stops"
+        }
+    }
 }
 
 enum TransportMode: String, CaseIterable, Identifiable {
@@ -175,6 +184,7 @@ struct PrimaryButton: View {
 // MARK: - Single Screen
 
 struct PreferencesOneScrollView: View {
+    @AppStorage("optimizationMode") private var savedPriority: String = Priority.lowestCost.rawValue
     @State private var prefs = Preferences()
 
     // When true, show the expanded wellness fields (your second screen content)
@@ -265,6 +275,14 @@ struct PreferencesOneScrollView: View {
                         .fill(Color.gray.opacity(0.2))
                         .frame(width: 34, height: 34)
                 }
+            }
+            .onAppear {
+                if let saved = Priority(rawValue: savedPriority) {
+                    prefs.priority = saved
+                }
+            }
+            .onChange(of: prefs.priority) { _, newValue in
+                savedPriority = newValue.rawValue
             }
         }
     }

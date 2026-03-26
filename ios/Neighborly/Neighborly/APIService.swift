@@ -27,7 +27,7 @@ enum APIService {
     static func searchProducts(
         query: String,
         page: Int = 1,
-        pageSize: Int = 20
+        pageSize: Int = 50
     ) async throws -> ProductSearchResponse {
         var components = URLComponents(
             url: AppConfig.apiBaseURL.appendingPathComponent("products"),
@@ -69,13 +69,14 @@ enum APIService {
     static func optimizeRoute(
         productIds: [String],
         userLat: Double? = nil,
-        userLng: Double? = nil
+        userLng: Double? = nil,
+        mode: String = "cost"
     ) async throws -> OptimizedRoute {
         let url = AppConfig.apiBaseURL
             .appendingPathComponent("routes")
             .appendingPathComponent("optimize")
 
-        var body: [String: Any] = ["product_ids": productIds]
+        var body: [String: Any] = ["product_ids": productIds, "mode": mode]
         if let lat = userLat { body["user_lat"] = lat }
         if let lng = userLng { body["user_lng"] = lng }
 
