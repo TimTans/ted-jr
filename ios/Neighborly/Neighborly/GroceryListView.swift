@@ -40,6 +40,7 @@ final class NetworkMonitor {
 final class LocationHelper: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private(set) var lastLocation: CLLocation?
+    private var locationContinuation: CheckedContinuation<CLLocation?, Never>?
 
     override init() {
         super.init()
@@ -54,12 +55,44 @@ final class LocationHelper: NSObject, CLLocationManagerDelegate {
         manager.requestLocation()
     }
 
+    /// Request location and wait up to `timeout` seconds for a fix.
+    /// Returns the cached location immediately if already available.
+    func requestLocation(timeout: TimeInterval = 3) async -> CLLocation? {
+        if let lastLocation { return lastLocation }
+
+        if manager.authorizationStatus == .notDetermined {
+            manager.requestWhenInUseAuthorization()
+        }
+        manager.requestLocation()
+
+        return await withCheckedContinuation { continuation in
+            locationContinuation = continuation
+
+            // timeout: resolve with nil if location doesn't arrive in time
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(timeout))
+                if let pending = locationContinuation {
+                    locationContinuation = nil
+                    pending.resume(returning: lastLocation)
+                }
+            }
+        }
+    }
+
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         lastLocation = locations.last
+        if let continuation = locationContinuation {
+            locationContinuation = nil
+            continuation.resume(returning: lastLocation)
+        }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         // silently fall back to no location — tiebreaker just won't apply
+        if let continuation = locationContinuation {
+            locationContinuation = nil
+            continuation.resume(returning: nil)
+        }
     }
 }
 
@@ -423,14 +456,11 @@ struct GroceryListView: View {
             return
         }
 
-        // request location for tiebreaking (non-blocking)
-        locationHelper.requestIfNeeded()
-
         routeState.isOptimizing = true
         routeState.error = nil
 
         do {
-            let loc = locationHelper.lastLocation
+            let loc = await locationHelper.requestLocation()
             let mode = Priority(rawValue: savedPriority)?.backendMode ?? "cost"
             let route = try await APIService.optimizeRoute(
                 productIds: productIds,
@@ -621,11 +651,6 @@ struct ItemDetailSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Capsule()
-                .fill(Color.gray.opacity(0.3))
-                .frame(width: 36, height: 5)
-                .padding(.top, 10)
-
             VStack(alignment: .leading, spacing: 16) {
                 // Item header
                 HStack(alignment: .top, spacing: 14) {
@@ -771,11 +796,6 @@ struct ProductDetailSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Capsule()
-                .fill(Color.gray.opacity(0.3))
-                .frame(width: 36, height: 5)
-                .padding(.top, 10)
-
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     // Product header
