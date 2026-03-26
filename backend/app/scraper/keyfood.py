@@ -101,6 +101,7 @@ async def _parse_products_from_page(
     store_id: str,
     store_zip: str,
     category: str | None,
+    base_domain: str = "",
 ) -> list[MarketplaceProduct]:
     """extract product data from the current page DOM."""
     scraped_at = datetime.now(timezone.utc).isoformat()
@@ -143,8 +144,10 @@ async def _parse_products_from_page(
             if img_el:
                 src = await img_el.get_attribute("src")
                 if src and "image-coming-soon" not in src:
-                    image_url = src if src.startswith("http") else None
-                # image_url = src if src else None  # keep all images including placeholders
+                    if src.startswith("http"):
+                        image_url = src
+                    elif src.startswith("/"):
+                        image_url = f"{base_domain}{src}"
 
             # sale detection: marketplace uses a "price--was" element for
             # the original price when a product is on sale.
@@ -260,7 +263,7 @@ async def scrape_store(
                 break
 
             products = await _parse_products_from_page(
-                page, store_id, store_zip, category_name,
+                page, store_id, store_zip, category_name, base_domain,
             )
 
             if not products:

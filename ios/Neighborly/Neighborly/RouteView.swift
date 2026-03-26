@@ -226,9 +226,7 @@ struct RouteView: View {
                     Task { await loadAlternatives(for: item) }
                 } label: {
                     HStack(spacing: 10) {
-                        let emoji = categoryEmojiForSlug(item.categorySlug)
-                        Text(emoji)
-                            .font(.title3)
+                        routeItemThumbnail(item)
                             .frame(width: 32, height: 32)
                             .background(NeighborlyTheme.greenSoft)
                             .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -352,6 +350,26 @@ struct RouteView: View {
     }
 
     // MARK: - Helpers
+
+    @ViewBuilder
+    private func routeItemThumbnail(_ item: RouteItem) -> some View {
+        if let imageUrl = item.imageUrl, let url = URL(string: imageUrl) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                default:
+                    Text(categoryEmojiForSlug(item.categorySlug))
+                        .font(.title3)
+                }
+            }
+        } else {
+            Text(categoryEmojiForSlug(item.categorySlug))
+                .font(.title3)
+        }
+    }
 
     private func categoryEmojiForSlug(_ slug: String?) -> String {
         guard let slug else { return "🛒" }
