@@ -71,10 +71,14 @@ struct GroceryListView: View {
     var routeState: RouteState
     @Binding var selectedTab: Int
 
+    @AppStorage("optimizationMode") private var savedPriority: String = Priority.lowestCost.rawValue
     @State private var searchText = ""
     @State private var searchResults: [Product] = []
     @State private var isSearching = false
     @State private var searchError: String?
+    @State private var searchPage = 1
+    @State private var searchTotalCount = 0
+    @State private var isLoadingMore = false
     @State private var selectedItem: GroceryListItem?
     @State private var selectedProduct: Product?
     @State private var searchDetailProduct: Product?
@@ -163,6 +167,8 @@ struct GroceryListView: View {
                     searchText = ""
                     searchResults = []
                     searchError = nil
+                    searchPage = 1
+                    searchTotalCount = 0
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(NeighborlyTheme.textMuted)
@@ -238,6 +244,16 @@ struct GroceryListView: View {
                         Divider()
                             .padding(.leading, 52)
                     }
+                }
+
+                // load more when reaching the bottom
+                if searchResults.count < searchTotalCount {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .onAppear {
+                            Task { await loadMoreResults() }
+                        }
                 }
             }
             .background(NeighborlyTheme.cardBackground)
@@ -415,10 +431,12 @@ struct GroceryListView: View {
 
         do {
             let loc = locationHelper.lastLocation
+            let mode = Priority(rawValue: savedPriority)?.backendMode ?? "cost"
             let route = try await APIService.optimizeRoute(
                 productIds: productIds,
                 userLat: loc?.coordinate.latitude,
-                userLng: loc?.coordinate.longitude
+                userLng: loc?.coordinate.longitude,
+                mode: mode
             )
             routeState.optimizedRoute = route
             routeState.isOptimizing = false
@@ -438,11 +456,14 @@ struct GroceryListView: View {
             searchResults = []
             searchError = nil
             isSearching = false
+            searchPage = 1
+            searchTotalCount = 0
             return
         }
 
         isSearching = true
         searchError = nil
+        searchPage = 1
 
         try? await Task.sleep(for: .milliseconds(300))
 
@@ -452,16 +473,36 @@ struct GroceryListView: View {
             let response = try await APIService.searchProducts(query: query)
             guard !Task.isCancelled else { return }
             searchResults = response.data
+            searchTotalCount = response.count
             searchError = nil
         } catch is CancellationError {
             return
         } catch {
             guard !Task.isCancelled else { return }
             searchResults = []
+            print("search error: \(error)")
             searchError = "Couldn't reach server"
         }
 
         isSearching = false
+    }
+
+    private func loadMoreResults() async {
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        guard !isLoadingMore, searchResults.count < searchTotalCount else { return }
+
+        isLoadingMore = true
+        let nextPage = searchPage + 1
+
+        do {
+            let response = try await APIService.searchProducts(query: query, page: nextPage)
+            searchResults.append(contentsOf: response.data)
+            searchPage = nextPage
+        } catch {
+            // silently fail on pagination, user still has existing results
+        }
+
+        isLoadingMore = false
     }
 
     private func addOrIncrement(_ product: Product) {
