@@ -98,7 +98,7 @@ struct OptimizedRoute: Codable {
     let itemsNotFound: [String]
 }
 
-struct RouteStop: Codable, Identifiable {
+struct RouteStop: Codable, Identifiable, Equatable {
     var id: String { store.id ?? store.name }
     let store: Store
     let items: [RouteItem]

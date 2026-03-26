@@ -83,6 +83,12 @@ struct MapboxRouteMap: View {
                 fitToStops()
                 Task { await fetchRoute() }
             }
+            .onChange(of: stops) { _, _ in
+                routeCoordinates = []
+                legInfos = []
+                fitToStops(animated: true)
+                Task { await fetchRoute() }
+            }
 
             // show all stops button when zoomed to a single pin
             if isZoomedToPin {
