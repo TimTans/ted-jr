@@ -1,9 +1,5 @@
 import SwiftUI
 
-// MARK: - Model
-
-import SwiftUI
-
 // Added to fix some issue with destination in HomeView
 struct PreferencesView: View {
     var body: some View {
@@ -269,13 +265,6 @@ struct PreferencesOneScrollView: View {
             }
             .navigationTitle("Your Preferences")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Circle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 34, height: 34)
-                }
-            }
             .onAppear {
                 if let saved = Priority(rawValue: savedPriority) {
                     prefs.priority = saved
@@ -358,7 +347,7 @@ struct WellnessSection: View {
                         Text("Wellness/Dietary Preferences")
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        Image(systemName: prefs.wellnessEnabled ? "chevron.down" : "chevron.up")
                             .foregroundStyle(.secondary)
                     }
                     .contentShape(Rectangle())
@@ -390,38 +379,36 @@ struct WellnessSection: View {
                     text: $prefs.sugarLimit
                 )
 
-                if expanded {
-                    Divider().opacity(0.15)
+                Divider().opacity(0.15)
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("Diet Type").foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Diet Type").foregroundStyle(.secondary)
 
-                        HStack(alignment: .top, spacing: 24) {
-                            VStack(alignment: .leading, spacing: 12) {
-                                CheckRow(title: "Vegan", checked: $prefs.dietVegan)
-                                CheckRow(title: "Gluten-Free", checked: $prefs.dietGlutenFree)
-                                CheckRow(title: "Low Carb", checked: $prefs.dietLowCarb)
-                            }
-                            VStack(alignment: .leading, spacing: 12) {
-                                CheckRow(title: "Kosher", checked: $prefs.dietKosher)
-                                CheckRow(title: "Halal", checked: $prefs.dietHalal)
-                                CheckRow(title: "Keto", checked: $prefs.dietKeto)
-                            }
-                        }
-                    }
-                    .padding(.top, 6)
-
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("Allergens to Avoid").foregroundStyle(.secondary)
+                    HStack(alignment: .top, spacing: 24) {
                         VStack(alignment: .leading, spacing: 12) {
-                            CheckRow(title: "Dairy", checked: $prefs.avoidDairy)
-                            CheckRow(title: "Peanuts", checked: $prefs.avoidPeanuts)
-                            CheckRow(title: "Shellfish", checked: $prefs.avoidShellfish)
-                            CheckRow(title: "Wheat", checked: $prefs.avoidWheat)
+                            CheckRow(title: "Vegan", checked: $prefs.dietVegan)
+                            CheckRow(title: "Gluten-Free", checked: $prefs.dietGlutenFree)
+                            CheckRow(title: "Low Carb", checked: $prefs.dietLowCarb)
+                        }
+                        VStack(alignment: .leading, spacing: 12) {
+                            CheckRow(title: "Kosher", checked: $prefs.dietKosher)
+                            CheckRow(title: "Halal", checked: $prefs.dietHalal)
+                            CheckRow(title: "Keto", checked: $prefs.dietKeto)
                         }
                     }
-                    .padding(.top, 6)
                 }
+                .padding(.top, 6)
+
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Allergens to Avoid").foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 12) {
+                        CheckRow(title: "Dairy", checked: $prefs.avoidDairy)
+                        CheckRow(title: "Peanuts", checked: $prefs.avoidPeanuts)
+                        CheckRow(title: "Shellfish", checked: $prefs.avoidShellfish)
+                        CheckRow(title: "Wheat", checked: $prefs.avoidWheat)
+                    }
+                }
+                .padding(.top, 6)
             }
         }
         .padding(14)
